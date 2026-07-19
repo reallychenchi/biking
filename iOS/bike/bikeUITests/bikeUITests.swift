@@ -23,12 +23,23 @@ final class bikeUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testPrimaryNavigationAndAboutPage() throws {
         let app = XCUIApplication()
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        XCTAssertTrue(app.tabBars.buttons["骑行"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.tabBars.buttons["历史"].exists)
+        XCTAssertTrue(app.tabBars.buttons["设置"].exists)
+
+        app.tabBars.buttons["设置"].tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 3))
+        app.buttons["关于骑行"].tap()
+
+        XCTAssertTrue(app.navigationBars["关于"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["骑行"].exists)
+        XCTAssertTrue(app.staticTexts["记录每一次骑行"].exists)
+        XCTAssertTrue(app.staticTexts["骑行记录仅保存在本机"].exists)
+        XCTAssertTrue(app.staticTexts["定位用于记录骑行轨迹、距离和速度"].exists)
     }
 
     @MainActor

@@ -10,22 +10,29 @@ import SwiftData
 
 @main
 struct bikeApp: App {
-    var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Item.self,
-        ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+    private let sharedModelContainer: ModelContainer
+    @State private var appModel: AppModel
 
+    init() {
+        let schema = Schema([RideEntity.self, TrackPointEntity.self])
+        let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [configuration])
+            sharedModelContainer = container
+            _appModel = State(
+                initialValue: AppModel(
+                    repository: SwiftDataRideRepository(modelContainer: container)
+                )
+            )
         } catch {
-            fatalError("Could not create ModelContainer: \(error)")
+            fatalError("Could not create local ride storage: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(appModel)
         }
         .modelContainer(sharedModelContainer)
     }

@@ -6,56 +6,58 @@
 //
 
 import SwiftUI
-import SwiftData
 
 struct ContentView: View {
-    @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    @Environment(AppModel.self) private var appModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        NavigationSplitView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
-            }
-        } detail: {
-            Text("Select an item")
-        }
-    }
+        @Bindable var appModel = appModel
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
-        }
-    }
+        TabView(selection: $appModel.selectedTab) {
+            RideView(
+                controller: appModel.rideController,
+                isOffline: appModel.networkMonitor.isOffline
+            )
+            .tabItem { Label("骑行", systemImage: "bicycle") }
+            .tag(AppTab.ride)
 
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            for index in offsets {
-                modelContext.delete(items[index])
+            HistoryView(library: appModel.rideLibrary) {
+                appModel.selectedTab = .ride
+            }
+            .tabItem { Label("历史", systemImage: "chart.bar.fill") }
+            .tag(AppTab.history)
+
+            SettingsView()
+                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tag(AppTab.settings)
+        }
+        .tint(AppTheme.accent)
+        .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .preferredColorScheme(.dark)
+        .task { await appModel.start() }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .background:
+                appModel.rideController.appDidEnterBackground()
+            case .active:
+                appModel.rideController.appWillEnterForeground()
+            case .inactive:
+                break
+            @unknown default:
+                break
             }
         }
+        .alert(
+            "上次骑行未正常结束",
+            isPresented: $appModel.showInterruptedRideAlert
+        ) {
+            Button("确认并删除", role: .destructive) {
+                Task { await appModel.discardInterruptedRide() }
+            }
+        } message: {
+            Text(appModel.interruptedRideError ?? "上次骑行未正常结束，记录未保存。确认后将删除临时记录。")
+        }
     }
-}
-
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
