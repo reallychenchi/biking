@@ -44,15 +44,15 @@ enum TrackingIssue: Equatable, Sendable {
     var message: String {
         switch self {
         case .locationUnavailable:
-            return "定位暂时不可用，已停止累计距离。"
+            return "定位暂时不可用，已停止累计距离和运动时间。"
         case .authorizationDenied:
-            return "定位权限已关闭，已停止累计距离。"
+            return "定位权限已关闭，已停止累计距离和运动时间。"
         case .authorizationRestricted:
             return "定位权限受到系统限制。"
         case .insufficientlyInUse:
             return "后台定位暂时不可用。"
         case .accuracyLimited:
-            return "精确定位不可用，已停止累计距离。"
+            return "精确定位不可用，已停止累计距离和运动时间。"
         }
     }
 }

@@ -60,9 +60,11 @@ actor SwiftDataRideRepository: RideRepository {
     }
 
     private func apply(_ progress: RideProgress, to ride: RideEntity) {
-        ride.elapsedSeconds = progress.elapsedSeconds
+        ride.totalElapsedSeconds = progress.totalElapsedSeconds
+        ride.movingElapsedSeconds = progress.movingElapsedSeconds
         ride.distanceMeters = progress.distanceMeters
         ride.maximumSpeedMetersPerSecond = progress.maximumSpeedMetersPerSecond
+        ride.overallSpeedMetersPerSecond = progress.overallSpeedMetersPerSecond
         ride.averageSpeedMetersPerSecond = progress.averageSpeedMetersPerSecond
         ride.updatedAt = progress.updatedAt
     }
@@ -76,9 +78,11 @@ actor SwiftDataRideRepository: RideRepository {
             status: status,
             startDate: entity.startDate,
             endDate: entity.endDate,
-            elapsedSeconds: entity.elapsedSeconds,
+            totalElapsedSeconds: entity.totalElapsedSeconds,
+            movingElapsedSeconds: entity.movingElapsedSeconds,
             distanceMeters: entity.distanceMeters,
             maximumSpeedMetersPerSecond: entity.maximumSpeedMetersPerSecond,
+            overallSpeedMetersPerSecond: entity.overallSpeedMetersPerSecond,
             averageSpeedMetersPerSecond: entity.averageSpeedMetersPerSecond,
             createdAt: entity.createdAt,
             updatedAt: entity.updatedAt,

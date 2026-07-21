@@ -179,14 +179,23 @@ private struct RecordingControlPanel: View {
             }
 
             HStack(spacing: 20) {
-                Text(RideFormatting.liveDuration(controller.elapsedSeconds))
-                    .font(.system(size: 48, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(AppTheme.accent)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .minimumScaleFactor(0.72)
-                    .accessibilityLabel("运动时间")
-                    .accessibilityValue(RideFormatting.fullDuration(controller.elapsedSeconds))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("运动时间")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.secondary)
+                    Text(RideFormatting.liveDuration(controller.movingElapsedSeconds))
+                        .font(.system(size: 42, weight: .medium, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(AppTheme.accent)
+                        .minimumScaleFactor(0.72)
+                    Text("全程时间  \(RideFormatting.fullDuration(controller.totalElapsedSeconds))")
+                        .font(.caption.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(AppTheme.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("运动时间 \(RideFormatting.fullDuration(controller.movingElapsedSeconds))，全程时间 \(RideFormatting.fullDuration(controller.totalElapsedSeconds))")
 
                 actionButton
             }

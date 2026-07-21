@@ -26,9 +26,11 @@ struct RideRecord: Identifiable, Hashable, Sendable {
     let status: RideStatus
     let startDate: Date
     let endDate: Date?
-    let elapsedSeconds: TimeInterval
+    let totalElapsedSeconds: TimeInterval
+    let movingElapsedSeconds: TimeInterval
     let distanceMeters: Double
     let maximumSpeedMetersPerSecond: Double
+    let overallSpeedMetersPerSecond: Double
     let averageSpeedMetersPerSecond: Double
     let createdAt: Date
     let updatedAt: Date
@@ -36,9 +38,11 @@ struct RideRecord: Identifiable, Hashable, Sendable {
 }
 
 struct RideProgress: Hashable, Sendable {
-    let elapsedSeconds: TimeInterval
+    let totalElapsedSeconds: TimeInterval
+    let movingElapsedSeconds: TimeInterval
     let distanceMeters: Double
     let maximumSpeedMetersPerSecond: Double
+    let overallSpeedMetersPerSecond: Double
     let averageSpeedMetersPerSecond: Double
     let updatedAt: Date
 }
@@ -80,8 +84,8 @@ struct RawLocationSample: Hashable, Sendable {
 }
 
 enum RideMetrics {
-    static func averageSpeed(distanceMeters: Double, elapsedSeconds: TimeInterval) -> Double {
-        guard elapsedSeconds > 0 else { return 0 }
-        return max(0, distanceMeters / elapsedSeconds)
+    static func speed(distanceMeters: Double, durationSeconds: TimeInterval) -> Double {
+        guard durationSeconds > 0 else { return 0 }
+        return max(0, distanceMeters / durationSeconds)
     }
 }

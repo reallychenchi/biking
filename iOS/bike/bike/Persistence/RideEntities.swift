@@ -7,9 +7,11 @@ final class RideEntity {
     var statusRawValue: String
     var startDate: Date
     var endDate: Date?
-    var elapsedSeconds: Double
+    var totalElapsedSeconds: Double
+    var movingElapsedSeconds: Double
     var distanceMeters: Double
     var maximumSpeedMetersPerSecond: Double
+    var overallSpeedMetersPerSecond: Double
     var averageSpeedMetersPerSecond: Double
     var createdAt: Date
     var updatedAt: Date
@@ -20,9 +22,11 @@ final class RideEntity {
         statusRawValue = RideStatus.recording.rawValue
         self.startDate = startDate
         endDate = nil
-        elapsedSeconds = 0
+        totalElapsedSeconds = 0
+        movingElapsedSeconds = 0
         distanceMeters = 0
         maximumSpeedMetersPerSecond = 0
+        overallSpeedMetersPerSecond = 0
         averageSpeedMetersPerSecond = 0
         self.createdAt = createdAt
         updatedAt = createdAt

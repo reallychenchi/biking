@@ -67,13 +67,43 @@ struct bikeTests {
 
     @Test
     func metricsAndFormattingUseRequiredUnits() {
-        #expect(RideMetrics.averageSpeed(distanceMeters: 1_000, elapsedSeconds: 0) == 0)
-        #expect(RideMetrics.averageSpeed(distanceMeters: 1_000, elapsedSeconds: 500) == 2)
+        #expect(RideMetrics.speed(distanceMeters: 1_000, durationSeconds: 0) == 0)
+        #expect(RideMetrics.speed(distanceMeters: 1_000, durationSeconds: 500) == 2)
+        #expect(RideMetrics.speed(distanceMeters: 1_000, durationSeconds: 400) == 2.5)
         #expect(RideFormatting.distance(1_234) == "1.23 km")
         #expect(RideFormatting.speed(10) == "36.00 km/h")
         #expect(RideFormatting.liveDuration(3_599) == "59:59")
         #expect(RideFormatting.liveDuration(3_600) == "01:00:00")
         #expect(RideFormatting.fullDuration(65) == "00:01:05")
+    }
+
+    @Test
+    func movementTimeUsesHysteresisAndStopsForStaleSpeed() {
+        var accumulator = MovementTimeAccumulator()
+
+        accumulator.consume(speedMetersPerSecond: 0.7, at: 1)
+        #expect(accumulator.elapsed(at: 2) == 0)
+
+        accumulator.consume(speedMetersPerSecond: 0.8, at: 2)
+        accumulator.consume(speedMetersPerSecond: 0.5, at: 4)
+        #expect(accumulator.elapsed(at: 6) == 4)
+
+        accumulator.consume(speedMetersPerSecond: 0.3, at: 7)
+        #expect(accumulator.elapsed(at: 10) == 5)
+
+        accumulator.consume(speedMetersPerSecond: 2, at: 12)
+        #expect(accumulator.elapsed(at: 30) == 10)
+        #expect(!accumulator.isMoving)
+    }
+
+    @Test
+    func invalidSpeedStopsMovementWithoutExceedingTotalTime() {
+        var accumulator = MovementTimeAccumulator()
+        accumulator.consume(speedMetersPerSecond: 2, at: 1)
+        accumulator.consume(speedMetersPerSecond: nil, at: 4)
+
+        #expect(accumulator.elapsed(at: 20) == 3)
+        #expect(!accumulator.isMoving)
     }
 
     @Test
@@ -97,10 +127,12 @@ struct bikeTests {
             segmentIndex: 0
         )
         let progress = RideProgress(
-            elapsedSeconds: 100,
+            totalElapsedSeconds: 100,
+            movingElapsedSeconds: 80,
             distanceMeters: 500,
             maximumSpeedMetersPerSecond: 6,
-            averageSpeedMetersPerSecond: 5,
+            overallSpeedMetersPerSecond: 5,
+            averageSpeedMetersPerSecond: 6.25,
             updatedAt: start.addingTimeInterval(100)
         )
 
@@ -119,6 +151,10 @@ struct bikeTests {
         #expect(records.count == 1)
         #expect(records.first?.status == .completed)
         #expect(records.first?.distanceMeters == 500)
+        #expect(records.first?.totalElapsedSeconds == 100)
+        #expect(records.first?.movingElapsedSeconds == 80)
+        #expect(records.first?.overallSpeedMetersPerSecond == 5)
+        #expect(records.first?.averageSpeedMetersPerSecond == 6.25)
         #expect(records.first?.points == [point])
         #expect(try await repository.unfinishedRideIDs().isEmpty)
     }

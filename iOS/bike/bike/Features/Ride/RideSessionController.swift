@@ -35,6 +35,7 @@ final class RideSessionController {
         let startDate: Date
         let startInstant: ContinuousClock.Instant
         var validator = LocationSampleValidator()
+        var movementTime = MovementTimeAccumulator()
         var pendingPoints: [TrackPoint] = []
         var segments: [[CLLocationCoordinate2D]] = []
         var distanceMeters = 0.0
@@ -58,7 +59,8 @@ final class RideSessionController {
     var onRideSaved: (() async -> Void)?
 
     private(set) var phase: RideSessionPhase = .idle
-    private(set) var elapsedSeconds: TimeInterval = 0
+    private(set) var totalElapsedSeconds: TimeInterval = 0
+    private(set) var movingElapsedSeconds: TimeInterval = 0
     private(set) var currentSpeedMetersPerSecond = 0.0
     private(set) var notice: RideNotice?
     private(set) var checkpointWarning: String?
@@ -77,10 +79,10 @@ final class RideSessionController {
         guard let activeRide else { return nil }
         if let latestDate = activeRide.latestAcceptedLocationDate {
             if Date().timeIntervalSince(latestDate) > LocationValidationConfiguration.speedFreshnessInterval {
-                return "定位信号较弱，已停止累计距离。"
+                return "定位信号较弱，已停止累计距离和运动时间。"
             }
-        } else if elapsedSeconds >= LocationValidationConfiguration.speedFreshnessInterval {
-            return "正在等待有效定位，当前不会累计距离。"
+        } else if totalElapsedSeconds >= LocationValidationConfiguration.speedFreshnessInterval {
+            return "正在等待有效定位，当前不会累计距离和运动时间。"
         }
         return checkpointWarning
     }
@@ -118,7 +120,8 @@ final class RideSessionController {
         }
 
         activeRide = ActiveRide(id: rideID, startDate: startDate, startInstant: clock.now)
-        elapsedSeconds = 0
+        totalElapsedSeconds = 0
+        movingElapsedSeconds = 0
         currentSpeedMetersPerSecond = 0
         trackingIssue = nil
         checkpointWarning = nil
@@ -210,6 +213,11 @@ final class RideSessionController {
         guard phase == .recording, var activeRide else { return }
         trackingIssue = update.issue
         guard let sample = update.sample else {
+            activeRide.movementTime.consume(
+                speedMetersPerSecond: nil,
+                at: elapsed(from: activeRide.startInstant)
+            )
+            self.activeRide = activeRide
             currentSpeedMetersPerSecond = 0
             if let issue = update.issue {
                 AppLog.location.warning("Location quality degraded: \(issue.message, privacy: .public)")
@@ -219,6 +227,10 @@ final class RideSessionController {
 
         switch activeRide.validator.validate(sample) {
         case let .rejected(reason):
+            activeRide.movementTime.consume(
+                speedMetersPerSecond: nil,
+                at: elapsed(from: activeRide.startInstant)
+            )
             currentSpeedMetersPerSecond = 0
             trackingIssue = .locationUnavailable
             AppLog.location.warning("Rejected location sample: \(String(describing: reason), privacy: .public)")
@@ -246,6 +258,10 @@ final class RideSessionController {
             if accepted.discardedDriftSegment {
                 AppLog.location.warning("Discarded a drifting location segment")
             }
+            activeRide.movementTime.consume(
+                speedMetersPerSecond: accepted.point.systemSpeedMetersPerSecond,
+                at: elapsed(from: activeRide.startInstant)
+            )
         }
 
         self.activeRide = activeRide
@@ -254,7 +270,11 @@ final class RideSessionController {
 
     private func refreshTimeAndSpeed() {
         guard let activeRide else { return }
-        elapsedSeconds = elapsed(from: activeRide.startInstant)
+        let totalElapsed = elapsed(from: activeRide.startInstant)
+        totalElapsedSeconds = totalElapsed
+        var movementTime = activeRide.movementTime
+        movingElapsedSeconds = movementTime.elapsed(at: totalElapsed)
+        self.activeRide?.movementTime = movementTime
         currentSpeedMetersPerSecond = LocationSampleValidator.freshSpeed(
             metersPerSecond: activeRide.latestSpeedMetersPerSecond,
             sampleDate: activeRide.latestSpeedDate,
@@ -290,7 +310,8 @@ final class RideSessionController {
             AppLog.persistence.info("Completed ride saved")
             self.activeRide = nil
             pendingCompletion = nil
-            elapsedSeconds = 0
+            totalElapsedSeconds = 0
+            movingElapsedSeconds = 0
             currentSpeedMetersPerSecond = 0
             checkpointWarning = nil
             trackingIssue = nil
@@ -304,14 +325,21 @@ final class RideSessionController {
     }
 
     private func makeProgress(from ride: ActiveRide, updatedAt: Date) -> RideProgress {
-        let elapsed = elapsed(from: ride.startInstant)
+        let totalElapsed = elapsed(from: ride.startInstant)
+        var movementTime = ride.movementTime
+        let movingElapsed = movementTime.elapsed(at: totalElapsed)
         return RideProgress(
-            elapsedSeconds: elapsed,
+            totalElapsedSeconds: totalElapsed,
+            movingElapsedSeconds: movingElapsed,
             distanceMeters: ride.distanceMeters,
             maximumSpeedMetersPerSecond: ride.maximumSpeedMetersPerSecond,
-            averageSpeedMetersPerSecond: RideMetrics.averageSpeed(
+            overallSpeedMetersPerSecond: RideMetrics.speed(
                 distanceMeters: ride.distanceMeters,
-                elapsedSeconds: elapsed
+                durationSeconds: totalElapsed
+            ),
+            averageSpeedMetersPerSecond: RideMetrics.speed(
+                distanceMeters: ride.distanceMeters,
+                durationSeconds: movingElapsed
             ),
             updatedAt: updatedAt
         )
