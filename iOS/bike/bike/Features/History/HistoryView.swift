@@ -4,8 +4,6 @@ struct HistoryView: View {
     let library: RideLibrary
     let startFirstRide: () -> Void
 
-    @State private var expandedRideIDs: Set<UUID> = []
-
     var body: some View {
         NavigationStack {
             Group {
@@ -15,11 +13,10 @@ struct HistoryView: View {
                     ScrollView {
                         LazyVStack(spacing: 14) {
                             ForEach(library.rides) { ride in
-                                HistoryRideCard(
-                                    ride: ride,
-                                    isExpanded: expandedRideIDs.contains(ride.id),
-                                    toggle: { toggle(ride.id) }
-                                )
+                                NavigationLink(value: ride) {
+                                    HistoryRideCard(ride: ride)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(16)
@@ -41,7 +38,7 @@ struct HistoryView: View {
                 }
             }
             .navigationDestination(for: RideRecord.self) { ride in
-                RideRouteView(ride: ride)
+                RideDetailView(ride: ride)
             }
         }
     }
@@ -61,75 +58,31 @@ struct HistoryView: View {
                 .accessibilityLabel("前往骑行页面")
         }
     }
-
-    private func toggle(_ id: UUID) {
-        withAnimation(.easeInOut(duration: 0.2)) {
-            if expandedRideIDs.contains(id) {
-                expandedRideIDs.remove(id)
-            } else {
-                expandedRideIDs.insert(id)
-            }
-        }
-    }
 }
 
 private struct HistoryRideCard: View {
     let ride: RideRecord
-    let isExpanded: Bool
-    let toggle: () -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            Button(action: toggle) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            value("骑行日期", RideFormatting.date(ride.startDate))
-                            value("开始时间", RideFormatting.time(ride.startDate))
-                        }
-                        HStack {
-                            value("总距离", RideFormatting.distance(ride.distanceMeters))
-                            value("全程时间", RideFormatting.fullDuration(ride.totalElapsedSeconds))
-                            value("全程速度", RideFormatting.speed(ride.overallSpeedMetersPerSecond))
-                        }
-                        HStack {
-                            value("运动时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
-                            value("平均速度", RideFormatting.speed(ride.averageSpeedMetersPerSecond))
-                        }
-                    }
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(width: AppTheme.minimumTapSize, height: AppTheme.minimumTapSize)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    value("骑行日期", RideFormatting.date(ride.startDate))
+                    value("开始时间", RideFormatting.time(ride.startDate))
                 }
-                .contentShape(Rectangle())
+                HStack {
+                    value("总距离", RideFormatting.distance(ride.distanceMeters))
+                    value("全程时间", RideFormatting.fullDuration(ride.totalElapsedSeconds))
+                    value("全程速度", RideFormatting.speed(ride.overallSpeedMetersPerSecond))
+                }
+                HStack {
+                    value("运动时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
+                    value("平均速度", RideFormatting.speed(ride.averageSpeedMetersPerSecond))
+                }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(isExpanded ? "收起骑行详情" : "展开骑行详情")
-
-            if isExpanded {
-                Divider().overlay(AppTheme.secondary.opacity(0.4))
-                    .padding(.vertical, 14)
-                VStack(spacing: 10) {
-                    detail("最快速度", RideFormatting.speed(ride.maximumSpeedMetersPerSecond))
-                    detail("全程速度", RideFormatting.speed(ride.overallSpeedMetersPerSecond))
-                    detail("平均速度", RideFormatting.speed(ride.averageSpeedMetersPerSecond))
-                    detail("开始时间", RideFormatting.dateTime(ride.startDate))
-                    detail("结束时间", ride.endDate.map { RideFormatting.dateTime($0) } ?? "—")
-                    detail("全程时间", RideFormatting.fullDuration(ride.totalElapsedSeconds))
-                    detail("运动时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
-                    detail("总距离", RideFormatting.distance(ride.distanceMeters))
-                }
-                NavigationLink(value: ride) {
-                    Label("查看轨迹", systemImage: "map")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.accent)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(AppTheme.accent.opacity(0.15), in: RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 6)
-            }
+            Image(systemName: "chevron.right")
+                .foregroundStyle(AppTheme.accent)
+                .frame(width: AppTheme.minimumTapSize, height: AppTheme.minimumTapSize)
         }
         .padding(16)
         .foregroundStyle(.white)
@@ -142,15 +95,5 @@ private struct HistoryRideCard: View {
             Text(text).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func detail(_ title: String, _ text: String) -> some View {
-        HStack {
-            Text(title).foregroundStyle(AppTheme.secondary)
-            Spacer()
-            Text(text).monospacedDigit()
-        }
-        .font(.subheadline)
-        .accessibilityElement(children: .combine)
     }
 }

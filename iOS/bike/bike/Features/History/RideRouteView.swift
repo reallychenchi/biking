@@ -75,7 +75,5 @@ struct RideRouteView: View {
                 .mapStyle(.standard)
             }
         }
-        .navigationTitle(RideFormatting.date(ride.startDate))
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
