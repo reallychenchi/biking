@@ -14,6 +14,7 @@ struct RideDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
+        .toolbar(.hidden, for: .tabBar)
     }
 }
 
