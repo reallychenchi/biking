@@ -10,17 +10,25 @@ struct HistoryView: View {
                 if library.rides.isEmpty {
                     emptyState
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 14) {
-                            ForEach(library.rides) { ride in
-                                NavigationLink(value: ride) {
-                                    HistoryRideCard(ride: ride)
+                    List {
+                        ForEach(library.rides) { ride in
+                            NavigationLink(value: ride) {
+                                HistoryRideCard(ride: ride)
+                            }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    library.stageDelete(ride: ride)
+                                } label: {
+                                    Label("删除", systemImage: "trash")
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
-                        .padding(16)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
             .background(AppTheme.pageBackground.ignoresSafeArea())
@@ -37,6 +45,16 @@ struct HistoryView: View {
                         .padding(.top, 8)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let message = library.undoBannerMessage {
+                    UndoBanner(message: message) {
+                        library.undoDelete()
+                    }
+                    .padding(.bottom, 16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: library.undoBannerMessage)
             .navigationDestination(for: RideRecord.self) { ride in
                 RideDetailView(ride: ride)
             }
@@ -57,6 +75,27 @@ struct HistoryView: View {
                 .foregroundStyle(.black)
                 .accessibilityLabel("前往骑行页面")
         }
+    }
+}
+
+private struct UndoBanner: View {
+    let message: String
+    let undo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.white)
+            Spacer()
+            Button("撤销", action: undo)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(AppTheme.accent)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(AppTheme.panelBackground, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, 16)
     }
 }
 

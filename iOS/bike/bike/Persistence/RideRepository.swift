@@ -7,6 +7,7 @@ protocol RideRepository: Sendable {
     func completedRides() async throws -> [RideRecord]
     func unfinishedRideIDs() async throws -> [UUID]
     func discardUnfinishedRides() async throws
+    func deleteRide(id: UUID) async throws
 }
 
 enum RideRepositoryError: LocalizedError {

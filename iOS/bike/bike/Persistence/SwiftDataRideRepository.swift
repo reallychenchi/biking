@@ -46,6 +46,12 @@ actor SwiftDataRideRepository: RideRepository {
         try modelContext.save()
     }
 
+    func deleteRide(id: UUID) throws {
+        let ride = try requireRide(id: id)
+        modelContext.delete(ride)
+        try modelContext.save()
+    }
+
     private func requireRide(id: UUID) throws -> RideEntity {
         let descriptor = FetchDescriptor<RideEntity>(predicate: #Predicate { $0.id == id })
         guard let ride = try modelContext.fetch(descriptor).first else {
