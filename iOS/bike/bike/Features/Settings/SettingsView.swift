@@ -14,6 +14,7 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(AppTheme.pageBackground)
             .navigationTitle("设置")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
         }

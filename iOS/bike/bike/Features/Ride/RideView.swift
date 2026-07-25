@@ -12,9 +12,6 @@ struct RideView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AppTheme.pageBackground
-                .frame(height: AppTheme.topSpacerHeight)
-
             map
                 .frame(maxHeight: .infinity)
 

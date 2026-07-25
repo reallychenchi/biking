@@ -7,7 +7,6 @@ enum AppTheme {
     static let destructive = Color(hex: 0xFF453A)
     static let secondary = Color(hex: 0x8E8E93)
 
-    static let topSpacerHeight: CGFloat = 64
     static let idlePanelHeight: CGFloat = 116
     static let recordingPanelHeight: CGFloat = 236
     static let panelCornerRadius: CGFloat = 28

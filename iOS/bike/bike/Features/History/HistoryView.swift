@@ -33,6 +33,7 @@ struct HistoryView: View {
             }
             .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("历史")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
             .overlay(alignment: .top) {
