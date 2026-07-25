@@ -173,6 +173,22 @@ struct bikeTests {
     }
 
     @Test
+    func controllerDiscardsShortRideWithNotice() async {
+        let repository = FakeRideRepository()
+        let tracking = FakeTrackingService(readiness: .ready)
+        let controller = RideSessionController(repository: repository, trackingService: tracking)
+
+        await controller.startRide()
+        #expect(controller.phase == .recording)
+        await controller.endRide()
+
+        #expect(controller.phase == .idle)
+        #expect(controller.notice?.title == "骑行时间太短")
+        #expect(await repository.completedRideCount() == 0)
+        #expect(await repository.deletedRideCount() == 1)
+    }
+
+    @Test
     func controllerKeepsFailedCompletionForRetry() async {
         let repository = FakeRideRepository()
         await repository.setCompletionFailure(true)
@@ -209,6 +225,7 @@ struct bikeTests {
 private actor FakeRideRepository: RideRepository {
     private var created = 0
     private var completed = 0
+    private var deleted = 0
     private var failCompletion = false
 
     func createTemporaryRide(id: UUID, startDate: Date, createdAt: Date) { created += 1 }
@@ -220,10 +237,12 @@ private actor FakeRideRepository: RideRepository {
     func completedRides() -> [RideRecord] { [] }
     func unfinishedRideIDs() -> [UUID] { [] }
     func discardUnfinishedRides() {}
+    func deleteRide(id: UUID) { deleted += 1 }
 
     func setCompletionFailure(_ value: Bool) { failCompletion = value }
     func createdRideCount() -> Int { created }
     func completedRideCount() -> Int { completed }
+    func deletedRideCount() -> Int { deleted }
 }
 
 @MainActor
