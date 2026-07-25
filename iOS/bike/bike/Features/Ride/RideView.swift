@@ -6,8 +6,10 @@ struct RideView: View {
     @Bindable var controller: RideSessionController
     let isOffline: Bool
 
-    @State private var cameraPosition: MapCameraPosition = .automatic
-    @State private var hasCenteredOnUser = false
+    @State private var cameraPosition: MapCameraPosition = .userLocation(
+        followsHeading: false,
+        fallback: .automatic
+    )
     @Namespace private var mapScope
 
     var body: some View {
@@ -66,25 +68,6 @@ struct RideView: View {
                 }
                 .padding(.top, 16)
                 .allowsHitTesting(false)
-            }
-        }
-        .onChange(of: controller.latestCoordinateToken) { _, _ in
-            guard !hasCenteredOnUser, let coordinate = controller.latestCoordinate else { return }
-            cameraPosition = .userLocation(
-                followsHeading: false,
-                fallback: .region(
-                    MKCoordinateRegion(
-                        center: coordinate,
-                        latitudinalMeters: 1_200,
-                        longitudinalMeters: 1_200
-                    )
-                )
-            )
-            hasCenteredOnUser = true
-        }
-        .onMapCameraChange(frequency: .onEnd) {
-            if cameraPosition.followsUserLocation {
-                hasCenteredOnUser = true
             }
         }
     }

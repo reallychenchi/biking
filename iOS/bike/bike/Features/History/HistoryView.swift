@@ -3,6 +3,7 @@ import SwiftUI
 struct HistoryView: View {
     let library: RideLibrary
     let startFirstRide: () -> Void
+    @State private var selectedRide: RideRecord?
 
     var body: some View {
         NavigationStack {
@@ -12,9 +13,12 @@ struct HistoryView: View {
                 } else {
                     List {
                         ForEach(library.rides) { ride in
-                            NavigationLink(value: ride) {
+                            Button {
+                                selectedRide = ride
+                            } label: {
                                 HistoryRideCard(ride: ride)
                             }
+                            .buttonStyle(.plain)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                             .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
@@ -24,6 +28,7 @@ struct HistoryView: View {
                                 } label: {
                                     Label("删除", systemImage: "trash")
                                 }
+                                .tint(AppTheme.destructive)
                             }
                         }
                     }
@@ -56,7 +61,7 @@ struct HistoryView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: library.undoBannerMessage)
-            .navigationDestination(for: RideRecord.self) { ride in
+            .navigationDestination(item: $selectedRide) { ride in
                 RideDetailView(ride: ride)
             }
         }
@@ -104,21 +109,11 @@ private struct HistoryRideCard: View {
     let ride: RideRecord
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    value("骑行日期", RideFormatting.date(ride.startDate))
-                    value("开始时间", RideFormatting.time(ride.startDate))
-                }
-                HStack {
-                    value("总距离", RideFormatting.distance(ride.distanceMeters))
-                    value("全程时间", RideFormatting.fullDuration(ride.totalElapsedSeconds))
-                    value("全程速度", RideFormatting.speed(ride.overallSpeedMetersPerSecond))
-                }
-                HStack {
-                    value("运动时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
-                    value("平均速度", RideFormatting.speed(ride.averageSpeedMetersPerSecond))
-                }
+        HStack(alignment: .center, spacing: 12) {
+            HStack {
+                value("骑行时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
+                value("开始时间", RideFormatting.time(ride.startDate))
+                value("总距离", RideFormatting.distance(ride.distanceMeters))
             }
             Image(systemName: "chevron.right")
                 .foregroundStyle(AppTheme.accent)

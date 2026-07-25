@@ -2,10 +2,20 @@ import MapKit
 import SwiftUI
 
 struct RideRouteView: View {
-    let ride: RideRecord
+    private let segments: [[CLLocationCoordinate2D]]
+    private let allCoordinates: [CLLocationCoordinate2D]
+    private let initialMapPosition: MapCameraPosition
 
-    private var segments: [[CLLocationCoordinate2D]] {
-        let sorted = ride.points.sorted { $0.sequence < $1.sequence }
+    init(ride: RideRecord) {
+        let segments = Self.makeSegments(from: ride.points)
+        let allCoordinates = segments.flatMap { $0 }
+        self.segments = segments
+        self.allCoordinates = allCoordinates
+        self.initialMapPosition = Self.mapPosition(for: allCoordinates)
+    }
+
+    private static func makeSegments(from points: [TrackPoint]) -> [[CLLocationCoordinate2D]] {
+        let sorted = points.sorted { $0.sequence < $1.sequence }
         guard !sorted.isEmpty else { return [] }
         var result: [[CLLocationCoordinate2D]] = []
         var current: [CLLocationCoordinate2D] = [sorted[0].coordinate]
@@ -22,12 +32,8 @@ struct RideRouteView: View {
         return result
     }
 
-    private var allCoordinates: [CLLocationCoordinate2D] {
-        segments.flatMap { $0 }
-    }
-
-    private var initialMapPosition: MapCameraPosition {
-        let points = allCoordinates.map { MKMapPoint($0) }
+    private static func mapPosition(for coordinates: [CLLocationCoordinate2D]) -> MapCameraPosition {
+        let points = coordinates.map { MKMapPoint($0) }
         guard !points.isEmpty else { return .automatic }
         let minX = points.map(\.x).min()!
         let maxX = points.map(\.x).max()!
