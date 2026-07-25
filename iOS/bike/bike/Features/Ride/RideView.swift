@@ -1,4 +1,6 @@
+import CoreLocation
 import MapKit
+import OSLog
 import SwiftUI
 import UIKit
 
@@ -6,10 +8,9 @@ struct RideView: View {
     @Bindable var controller: RideSessionController
     let isOffline: Bool
 
-    @State private var cameraPosition: MapCameraPosition = .userLocation(
-        followsHeading: false,
-        fallback: .automatic
-    )
+    @State private var cameraPosition: MapCameraPosition = .region(.chinaOverview)
+    @State private var mapLocationProvider = RideMapLocationProvider()
+    @State private var hasRequestedInitialLocation = false
     @Namespace private var mapScope
 
     var body: some View {
@@ -54,6 +55,21 @@ struct RideView: View {
                 .accessibilityLabel("回到当前位置")
             MapCompass(scope: mapScope)
                 .accessibilityLabel("地图指南针")
+        }
+        .onMapCameraChange(frequency: .onEnd) {
+            guard !hasRequestedInitialLocation else { return }
+            hasRequestedInitialLocation = true
+            Task {
+                do {
+                    try await Task.sleep(for: RideMapConfiguration.overviewDisplayDuration)
+                } catch {
+                    return
+                }
+                guard let coordinate = await mapLocationProvider.currentCoordinateIfAuthorized() else { return }
+                withAnimation {
+                    cameraPosition = .region(.nearby(coordinate))
+                }
+            }
         }
         .overlay {
             if isOffline {
@@ -229,6 +245,78 @@ private struct RecordingControlPanel: View {
                 .foregroundStyle(.white)
                 .background(color, in: RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
         }
+    }
+}
+
+@MainActor
+private final class RideMapLocationProvider: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+    private var continuation: CheckedContinuation<CLLocationCoordinate2D?, Never>?
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
+    }
+
+    func currentCoordinateIfAuthorized() async -> CLLocationCoordinate2D? {
+        guard CLLocationManager.locationServicesEnabled() else { return nil }
+
+        switch manager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse:
+            break
+        case .denied, .notDetermined, .restricted:
+            return nil
+        @unknown default:
+            assertionFailure("Unhandled location authorization status")
+            return nil
+        }
+
+        return await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            manager.requestLocation()
+        }
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let location = locations.last, location.horizontalAccuracy >= 0 else {
+            finish(with: nil)
+            return
+        }
+        AppLog.location.info("Initial map location resolved")
+        finish(with: location.coordinate)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        AppLog.location.warning("Initial map location unavailable: \(error.localizedDescription, privacy: .public)")
+        finish(with: nil)
+    }
+
+    private func finish(with coordinate: CLLocationCoordinate2D?) {
+        continuation?.resume(returning: coordinate)
+        continuation = nil
+    }
+}
+
+private enum RideMapConfiguration {
+    static let overviewCenter = CLLocationCoordinate2D(latitude: 35.86, longitude: 104.19)
+    static let overviewSpan = MKCoordinateSpan(latitudeDelta: 22, longitudeDelta: 24)
+    static let overviewDisplayDuration: Duration = .milliseconds(1_500)
+    static let nearbyRegionMeters: CLLocationDistance = 1_200
+}
+
+private extension MKCoordinateRegion {
+    static let chinaOverview = MKCoordinateRegion(
+        center: RideMapConfiguration.overviewCenter,
+        span: RideMapConfiguration.overviewSpan
+    )
+
+    static func nearby(_ coordinate: CLLocationCoordinate2D) -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: coordinate,
+            latitudinalMeters: RideMapConfiguration.nearbyRegionMeters,
+            longitudinalMeters: RideMapConfiguration.nearbyRegionMeters
+        )
     }
 }
 
