@@ -21,10 +21,21 @@ enum RideSessionPhase: Equatable {
     }
 }
 
+private enum RideSessionConfiguration {
+    static let shortRideDurationThresholdSeconds: TimeInterval = 5
+}
+
 struct RideNotice: Identifiable, Equatable {
     let id = UUID()
+    let title: String
     let message: String
     let offersSettings: Bool
+
+    init(title: String = "无法开始骑行", message: String, offersSettings: Bool) {
+        self.title = title
+        self.message = message
+        self.offersSettings = offersSettings
+    }
 }
 
 @MainActor
@@ -143,6 +154,25 @@ final class RideSessionController {
         guard let activeRide else {
             assertionFailure("Recording state requires an active ride")
             phase = .idle
+            return
+        }
+
+        if totalElapsedSeconds <= RideSessionConfiguration.shortRideDurationThresholdSeconds {
+            AppLog.ride.info("Ride discarded: duration \(Int(self.totalElapsedSeconds))s is at or below threshold \(Int(RideSessionConfiguration.shortRideDurationThresholdSeconds))s")
+            do {
+                try await repository.deleteRide(id: activeRide.id)
+            } catch {
+                assertionFailure("Failed to delete short ride: \(error)")
+                AppLog.persistence.error("Failed to delete short ride: \(error.localizedDescription, privacy: .public)")
+            }
+            self.activeRide = nil
+            pendingCompletion = nil
+            totalElapsedSeconds = 0
+            movingElapsedSeconds = 0
+            checkpointWarning = nil
+            trackingIssue = nil
+            phase = .idle
+            notice = RideNotice(title: "骑行时间太短", message: "本次骑行时间不足，不计入记录。", offersSettings: false)
             return
         }
 

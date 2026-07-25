@@ -21,7 +21,7 @@ struct RideView: View {
         }
         .background(AppTheme.pageBackground)
         .alert(
-            "无法开始骑行",
+            controller.notice?.title ?? "",
             isPresented: Binding(
                 get: { controller.notice != nil },
                 set: { if !$0 { controller.dismissNotice() } }
