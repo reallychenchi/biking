@@ -7,9 +7,13 @@
 
 import SwiftUI
 import SwiftData
+import UMCommon
+import UMAPM
 
 @main
 struct bikeApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
+
     private let sharedModelContainer: ModelContainer
     @State private var appModel: AppModel
 
@@ -35,5 +39,25 @@ struct bikeApp: App {
                 .environment(appModel)
         }
         .modelContainer(sharedModelContainer)
+    }
+}
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        // 友盟统计SDK初始化
+        // 友盟APM性能监控配置（必须在UMConfigure.initWithAppkey之前调用）
+        let config = UMAPMConfig.default()
+        config.crashAndBlockMonitorEnable = true
+        config.launchMonitorEnable = true
+        config.memMonitorEnable = true
+        config.oomMonitorEnable = true
+        config.networkEnable = true
+        config.javaScriptBridgeEnable = true
+        config.pageMonitorEnable = true
+        config.logCollectEnable = true
+        UMCrashConfigure.setAPMConfig(config)
+
+        UMConfigure.initWithAppkey("6a65502fe88ae439bf3ab8ef", channel: "App Store")
+        return true
     }
 }

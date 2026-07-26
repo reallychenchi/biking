@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AE09A91F2B24383438315BB5 /* Pods_bike.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F59ED2C08807DBD0CB9437D4 /* Pods_bike.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		58F7229A300CC58700836AC1 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,9 @@
 		58F72288300CC58500836AC1 /* bike.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = bike.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		58F72299300CC58700836AC1 /* bikeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = bikeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		58F722A3300CC58700836AC1 /* bikeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = bikeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		76D81B90FA9DFF6B426F2608 /* Pods-bike.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-bike.debug.xcconfig"; path = "Target Support Files/Pods-bike/Pods-bike.debug.xcconfig"; sourceTree = "<group>"; };
+		9DB026FEDBD386F702A25F5B /* Pods-bike.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-bike.release.xcconfig"; path = "Target Support Files/Pods-bike/Pods-bike.release.xcconfig"; sourceTree = "<group>"; };
+		F59ED2C08807DBD0CB9437D4 /* Pods_bike.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_bike.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,11 +57,15 @@
 		};
 		58F7229C300CC58700836AC1 /* bikeTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = bikeTests;
 			sourceTree = "<group>";
 		};
 		58F722A6300CC58700836AC1 /* bikeUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = bikeUITests;
 			sourceTree = "<group>";
 		};
@@ -65,6 +76,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AE09A91F2B24383438315BB5 /* Pods_bike.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -85,6 +97,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		3EA3CE677527E6290FA1B708 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F59ED2C08807DBD0CB9437D4 /* Pods_bike.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		58F7227F300CC58500836AC1 = {
 			isa = PBXGroup;
 			children = (
@@ -92,6 +112,8 @@
 				58F7229C300CC58700836AC1 /* bikeTests */,
 				58F722A6300CC58700836AC1 /* bikeUITests */,
 				58F72289300CC58500836AC1 /* Products */,
+				77B6ECE82186D67CDCEF0BB1 /* Pods */,
+				3EA3CE677527E6290FA1B708 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -105,6 +127,16 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		77B6ECE82186D67CDCEF0BB1 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				76D81B90FA9DFF6B426F2608 /* Pods-bike.debug.xcconfig */,
+				9DB026FEDBD386F702A25F5B /* Pods-bike.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -112,6 +144,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 58F722AC300CC58700836AC1 /* Build configuration list for PBXNativeTarget "bike" */;
 			buildPhases = (
+				F6A07CAEF705FDCB1F5DD05F /* [CP] Check Pods Manifest.lock */,
 				58F72284300CC58500836AC1 /* Sources */,
 				58F72285300CC58500836AC1 /* Frameworks */,
 				58F72286300CC58500836AC1 /* Resources */,
@@ -124,8 +157,6 @@
 				58F7228A300CC58500836AC1 /* bike */,
 			);
 			name = bike;
-			packageProductDependencies = (
-			);
 			productName = bike;
 			productReference = 58F72288300CC58500836AC1 /* bike.app */;
 			productType = "com.apple.product-type.application";
@@ -147,8 +178,6 @@
 				58F7229C300CC58700836AC1 /* bikeTests */,
 			);
 			name = bikeTests;
-			packageProductDependencies = (
-			);
 			productName = bikeTests;
 			productReference = 58F72299300CC58700836AC1 /* bikeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -170,8 +199,6 @@
 				58F722A6300CC58700836AC1 /* bikeUITests */,
 			);
 			name = bikeUITests;
-			packageProductDependencies = (
-			);
 			productName = bikeUITests;
 			productReference = 58F722A3300CC58700836AC1 /* bikeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -244,6 +271,31 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		F6A07CAEF705FDCB1F5DD05F /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-bike-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		58F72284300CC58500836AC1 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -284,6 +336,7 @@
 /* Begin XCBuildConfiguration section */
 		58F722AD300CC58700836AC1 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 76D81B90FA9DFF6B426F2608 /* Pods-bike.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -316,6 +369,7 @@
 		};
 		58F722AE300CC58700836AC1 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9DB026FEDBD386F702A25F5B /* Pods-bike.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -384,7 +438,7 @@
 				DEVELOPMENT_TEAM = CFMWD9367D;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -448,7 +502,7 @@
 				DEVELOPMENT_TEAM = CFMWD9367D;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

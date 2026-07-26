@@ -1,0 +1,23 @@
+# Uncomment the next line to define a global platform for your project
+platform :ios, '14.0'
+
+target 'bike' do
+  use_frameworks!
+  
+  # 友盟统计SDK
+  pod 'UMCommon'
+  # 友盟APM性能监控SDK
+  pod 'UMAPM'
+  pod 'UMDevice'
+  
+  # 自动修正Pods的iOS部署目标版本
+  post_install do |installer|
+    installer.pods_project.targets.each do |target|
+      target.build_configurations.each do |config|
+        if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 14.0
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+        end
+      end
+    end
+  end
+end
