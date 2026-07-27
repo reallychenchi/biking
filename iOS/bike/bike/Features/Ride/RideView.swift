@@ -11,6 +11,7 @@ struct RideView: View {
     @State private var cameraPosition: MapCameraPosition = .region(.chinaOverview)
     @State private var mapLocationProvider = RideMapLocationProvider()
     @State private var hasRequestedInitialLocation = false
+    @State private var mapIsReady = false
     @Namespace private var mapScope
 
     var body: some View {
@@ -57,6 +58,11 @@ struct RideView: View {
                 .accessibilityLabel("地图指南针")
         }
         .onMapCameraChange(frequency: .onEnd) {
+            if !mapIsReady {
+                withAnimation(.easeOut(duration: 0.4)) {
+                    mapIsReady = true
+                }
+            }
             guard !hasRequestedInitialLocation else { return }
             hasRequestedInitialLocation = true
             Task {
@@ -84,6 +90,18 @@ struct RideView: View {
                 }
                 .padding(.top, 16)
                 .allowsHitTesting(false)
+            }
+        }
+        .overlay {
+            if !mapIsReady {
+                AppTheme.pageBackground
+                    .overlay(alignment: .center) {
+                        ProgressView()
+                            .tint(AppTheme.accent)
+                            .scaleEffect(1.5)
+                    }
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
             }
         }
     }
