@@ -15,9 +15,8 @@ struct RideView: View {
     @Namespace private var mapScope
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack(alignment: .bottom) {
             map
-                .frame(maxHeight: .infinity)
 
             controlPanel
         }
@@ -49,6 +48,7 @@ struct RideView: View {
                 }
             }
         }
+        .ignoresSafeArea()
         .mapScope(mapScope)
         .mapStyle(.standard(elevation: .realistic))
         .mapControls {
@@ -156,7 +156,7 @@ private struct IdleControlPanel: View {
         .padding(.vertical, 20)
         .frame(height: AppTheme.idlePanelHeight)
         .background(
-            AppTheme.panelBackground,
+            .ultraThinMaterial,
             in: UnevenRoundedRectangle(
                 topLeadingRadius: AppTheme.panelCornerRadius,
                 topTrailingRadius: AppTheme.panelCornerRadius
@@ -219,7 +219,7 @@ private struct RecordingControlPanel: View {
         .padding(.bottom, 16)
         .frame(height: AppTheme.recordingPanelHeight)
         .background(
-            AppTheme.panelBackground,
+            .ultraThinMaterial,
             in: UnevenRoundedRectangle(
                 topLeadingRadius: AppTheme.panelCornerRadius,
                 topTrailingRadius: AppTheme.panelCornerRadius

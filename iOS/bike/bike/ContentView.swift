@@ -20,22 +20,23 @@ struct ContentView: View {
                 controller: appModel.rideController,
                 isOffline: appModel.networkMonitor.isOffline
             )
+            .glassTabBar()
             .tabItem { Label("骑行", systemImage: "bicycle") }
             .tag(AppTab.ride)
 
             HistoryView(library: appModel.rideLibrary) {
                 appModel.selectedTab = .ride
             }
+            .glassTabBar()
             .tabItem { Label("历史", systemImage: "chart.bar.fill") }
             .tag(AppTab.history)
 
             SettingsView()
+                .glassTabBar()
                 .tabItem { Label("设置", systemImage: "gearshape.fill") }
                 .tag(AppTab.settings)
         }
         .tint(AppTheme.accentForeground)
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
         .preferredColorScheme(appearancePreference.preferredColorScheme)
         .task { await appModel.start() }
         .onChange(of: scenePhase) { _, phase in
@@ -60,5 +61,12 @@ struct ContentView: View {
         } message: {
             Text(appModel.interruptedRideError ?? "上次骑行未正常结束，记录未保存。确认后将删除临时记录。")
         }
+    }
+}
+
+private extension View {
+    func glassTabBar() -> some View {
+        toolbarBackground(.ultraThinMaterial, for: .tabBar)
+            .toolbarBackground(.visible, for: .tabBar)
     }
 }
