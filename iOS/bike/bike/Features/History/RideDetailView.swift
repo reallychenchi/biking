@@ -96,6 +96,11 @@ private struct RideDetailInfoView: View {
                         RideMetricCard(metric: metric)
                     }
                 }
+
+                RideSpeedChartsView(
+                    points: ride.points,
+                    endDistanceMeters: ride.distanceMeters
+                )
             }
             .padding(.horizontal, Layout.pagePadding)
             .padding(.vertical, Layout.sectionSpacing)

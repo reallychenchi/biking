@@ -16,9 +16,9 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 | 全局应用状态 | 持有 Tab 状态、骑行控制器、历史库、网络监视器；启动时加载历史并检查未完成骑行 | `iOS/bike/bike/AppModel.swift` |
 | 根界面与生命周期桥接 | 组装骑行、历史、设置三个 Tab；把前后台事件转交骑行控制器 | `iOS/bike/bike/ContentView.swift` |
 | 骑行功能 | 管理骑行状态机、运行任务、实时地图和指标、开始/结束/重试交互 | `iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Features/Ride/RideView.swift` |
-| 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
+| 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情、速度分析图表和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
 | 设置功能 | 在当前页面切换并持久化主题偏好；展示关于页和本地数据/定位用途说明 | `iOS/bike/bike/Features/Settings/SettingsView.swift` |
-| 核心领域 | 定义骑行、轨迹点、进度、完成快照和指标公式 | `iOS/bike/bike/Domain/RideModels.swift` |
+| 核心领域 | 定义骑行、轨迹点、进度、完成快照、指标公式和基于轨迹点的速度距离分析 | `iOS/bike/bike/Domain/RideModels.swift`、`iOS/bike/bike/Domain/RideSpeedAnalysis.swift` |
 | 定位校验与指标累计 | 校验位置/速度/轨迹段，累计带迟滞与超时规则的运动时间；过滤、平滑并累计海拔趋势 | `iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift` |
 | 展示格式 | 将米、米每秒、秒和日期转换为 UI 文本 | `iOS/bike/bike/Domain/RideFormatting.swift` |
 | 定位服务 | 请求定位权限和临时精确定位；通过 `CLLocationUpdate` 输出异步更新；维护后台活动会话 | `iOS/bike/bike/Services/RideTrackingService.swift` |
@@ -89,7 +89,8 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 1. `RideLibrary.reload()` 查询完成记录，仓储按开始时间倒序映射实体为 `RideRecord`（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
 2. 列表项依次查询内存缓存和 App `Caches/RideRouteSnapshots` 磁盘缓存；均未命中时才异步使用 MapKit 生成等宽高地图快照并叠加分段轨迹和起终点。生成期间显示进度占位，成功后写入两级缓存并自动刷新（`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift`）。
 3. 详情页与缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；详情页以 MapKit polyline 展示并标记起终点（`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
-4. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
+4. 详情页使用同一组持久化轨迹点派生累计距离—有效系统速度曲线，并按固定绝对速度区间累计有效距离占比；计算规则位于 Domain，图表只负责展示，不新增持久化字段（`iOS/bike/bike/Domain/RideSpeedAnalysis.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`）。
+5. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
 
 ### 5. 网络状态
 

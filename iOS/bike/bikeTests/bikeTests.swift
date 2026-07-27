@@ -207,6 +207,95 @@ struct bikeTests {
     }
 
     @Test
+    func speedAnalysisBuildsDistanceCurveAndZoneShares() {
+        let start = Date(timeIntervalSince1970: 3_600)
+        let points = [
+            trackPoint(
+                sequence: 0,
+                longitude: 116.000,
+                segmentIndex: 0,
+                date: start,
+                speedMetersPerSecond: 2
+            ),
+            trackPoint(
+                sequence: 1,
+                longitude: 116.001,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(1),
+                speedMetersPerSecond: 4
+            ),
+            trackPoint(
+                sequence: 2,
+                longitude: 116.002,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(2),
+                speedMetersPerSecond: nil
+            ),
+            trackPoint(
+                sequence: 3,
+                longitude: 116.003,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(3),
+                speedMetersPerSecond: 6
+            ),
+            trackPoint(
+                sequence: 4,
+                longitude: 116.004,
+                segmentIndex: 1,
+                date: start.addingTimeInterval(4),
+                speedMetersPerSecond: 8
+            )
+        ]
+
+        let analysis = RideSpeedAnalysis(points: points)
+
+        #expect(analysis.chartPoints.map(\.sequence) == [0, 1, 3, 4])
+        #expect(analysis.chartPoints.map(\.seriesIndex) == [0, 0, 1, 2])
+        #expect(analysis.totalDistanceMeters > 0)
+        #expect(analysis.classifiedDistanceMeters > 0)
+        #expect(analysis.unclassifiedDistanceMeters > 0)
+
+        let tenToFifteen = analysis.zoneShares.first { $0.zone.id == 1 }
+        let twentyToTwentyFive = analysis.zoneShares.first { $0.zone.id == 3 }
+        #expect(abs((tenToFifteen?.proportion ?? 0) - 0.5) < 0.001)
+        #expect(abs((twentyToTwentyFive?.proportion ?? 0) - 0.5) < 0.001)
+    }
+
+    @Test
+    func speedAnalysisUsesFixedInclusiveLowerZoneBounds() {
+        let start = Date(timeIntervalSince1970: 3_700)
+        let points = [
+            trackPoint(
+                sequence: 0,
+                longitude: 116.000,
+                segmentIndex: 0,
+                date: start,
+                speedMetersPerSecond: 2
+            ),
+            trackPoint(
+                sequence: 1,
+                longitude: 116.001,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(1),
+                speedMetersPerSecond: 10 / 3.6
+            ),
+            trackPoint(
+                sequence: 2,
+                longitude: 116.002,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(2),
+                speedMetersPerSecond: 30 / 3.6
+            )
+        ]
+
+        let analysis = RideSpeedAnalysis(points: points)
+
+        #expect(analysis.zoneShares.first { $0.zone.id == 0 }?.distanceMeters == 0)
+        #expect((analysis.zoneShares.first { $0.zone.id == 1 }?.distanceMeters ?? 0) > 0)
+        #expect((analysis.zoneShares.first { $0.zone.id == 5 }?.distanceMeters ?? 0) > 0)
+    }
+
+    @Test
     func routeSnapshotDiskCachePersistsData() async throws {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -380,7 +469,8 @@ struct bikeTests {
         sequence: Int,
         longitude: Double,
         segmentIndex: Int,
-        date: Date
+        date: Date,
+        speedMetersPerSecond: Double? = 2
     ) -> TrackPoint {
         TrackPoint(
             id: UUID(),
@@ -389,7 +479,7 @@ struct bikeTests {
             longitude: longitude,
             timestamp: date,
             horizontalAccuracy: 5,
-            systemSpeedMetersPerSecond: 2,
+            systemSpeedMetersPerSecond: speedMetersPerSecond,
             segmentIndex: segmentIndex
         )
     }
