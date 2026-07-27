@@ -16,7 +16,7 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 | 全局应用状态 | 持有 Tab 状态、骑行控制器、历史库、网络监视器；启动时加载历史并检查未完成骑行 | `iOS/bike/bike/AppModel.swift` |
 | 根界面与生命周期桥接 | 组装骑行、历史、设置三个 Tab；把前后台事件转交骑行控制器 | `iOS/bike/bike/ContentView.swift` |
 | 骑行功能 | 管理骑行状态机、运行任务、实时地图和指标、开始/结束/重试交互 | `iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Features/Ride/RideView.swift` |
-| 历史功能 | 加载、延迟删除及撤销记录；展示列表、详情和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift` |
+| 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
 | 设置功能 | 展示关于页和本地数据/定位用途说明 | `iOS/bike/bike/Features/Settings/SettingsView.swift` |
 | 核心领域 | 定义骑行、轨迹点、进度、完成快照和指标公式 | `iOS/bike/bike/Domain/RideModels.swift` |
 | 定位校验与运动计时 | 校验位置/速度/轨迹段，累计带迟滞与超时规则的运动时间 | `iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift` |
@@ -87,8 +87,9 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 ### 4. 历史读取、轨迹与删除
 
 1. `RideLibrary.reload()` 查询完成记录，仓储按开始时间倒序映射实体为 `RideRecord`（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
-2. 详情页按 `segmentIndex` 重建轨迹段，以 MapKit polyline 展示，并标记起终点（`iOS/bike/bike/Features/History/RideRouteView.swift`）。
-3. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
+2. 列表项依次查询内存缓存和 App `Caches/RideRouteSnapshots` 磁盘缓存；均未命中时才异步使用 MapKit 生成等宽高地图快照并叠加分段轨迹和起终点。生成期间显示进度占位，成功后写入两级缓存并自动刷新（`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift`）。
+3. 详情页与缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；详情页以 MapKit polyline 展示并标记起终点（`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
+4. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
 
 ### 5. 网络状态
 
@@ -129,7 +130,7 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 ## 需要人工确认
 
 1. 友盟统计/APM 的实际采集范围、用户同意流程、隐私清单、数据留存和发布合规策略。代码只能确认 SDK 已初始化（`iOS/bike/bike/bikeApp.swift`）。
-2. `docs/iOS骑行App需求文档.md` 仍写明不接入统计/崩溃上报，且描述旧的历史“展开”交互和“不支持删除”；这些与 `iOS/bike/bike/bikeApp.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideLibrary.swift` 不一致，需确定是更新需求还是回退实现。
+2. `docs/iOS骑行App需求文档.md` 仍写明不接入统计/崩溃上报和“不支持删除”；这些与 `iOS/bike/bike/bikeApp.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideLibrary.swift` 不一致，需确定是更新需求还是回退实现。
 3. `iOS/bike/Podfile` 声明 iOS 14.0，而 `iOS/bike/bike.xcodeproj/project.pbxproj` 和使用的 API 指向 iOS 18.0；需确认 Podfile 是否应统一为 18.0。
 4. 友盟接入后，`bikeTests` 在当前 Xcode 26.3 环境编译时无法解析 `UMAPM`、`UMCommon` 模块；App Simulator build 成功。测试 target 是否应继承 Pods 搜索路径或通过入口隔离第三方 SDK，需人工确认后修复（目标定义见 `iOS/bike/bike.xcodeproj/project.pbxproj`）。
 5. 正式品牌名、签名/发布环境、App Store 隐私声明和生产监控开关不在仓库文档中，**需要人工确认**（现有工程配置见 `iOS/bike/bike.xcodeproj/project.pbxproj`、`iOS/bike/bike/Info.plist`）。

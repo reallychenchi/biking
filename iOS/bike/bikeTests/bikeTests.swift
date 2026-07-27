@@ -78,6 +78,37 @@ struct bikeTests {
     }
 
     @Test
+    func routeGeometrySortsPointsAndPreservesSegmentBreaks() {
+        let start = Date(timeIntervalSince1970: 3_500)
+        let points = [
+            trackPoint(sequence: 2, longitude: 116.002, segmentIndex: 1, date: start.addingTimeInterval(2)),
+            trackPoint(sequence: 0, longitude: 116.000, segmentIndex: 0, date: start),
+            trackPoint(sequence: 1, longitude: 116.001, segmentIndex: 0, date: start.addingTimeInterval(1))
+        ]
+
+        let geometry = RideRouteGeometry(points: points)
+
+        #expect(geometry.segments.count == 2)
+        #expect(geometry.segments[0].map(\.longitude) == [116.000, 116.001])
+        #expect(geometry.segments[1].map(\.longitude) == [116.002])
+        #expect(geometry.coordinates.map(\.longitude) == [116.000, 116.001, 116.002])
+        #expect(geometry.mapRect != nil)
+    }
+
+    @Test
+    func routeSnapshotDiskCachePersistsData() async throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let cache = RideRouteSnapshotDiskCache(directoryURL: directoryURL)
+        let expectedData = Data([0x01, 0x02, 0x03])
+
+        #expect(try await cache.data(forKey: "ride") == nil)
+        try await cache.store(expectedData, forKey: "ride")
+        #expect(try await cache.data(forKey: "ride") == expectedData)
+    }
+
+    @Test
     func movementTimeUsesHysteresisAndStopsForStaleSpeed() {
         var accumulator = MovementTimeAccumulator()
 
@@ -218,6 +249,24 @@ struct bikeTests {
             timestamp: date,
             horizontalAccuracy: accuracy,
             systemSpeedMetersPerSecond: speed
+        )
+    }
+
+    private func trackPoint(
+        sequence: Int,
+        longitude: Double,
+        segmentIndex: Int,
+        date: Date
+    ) -> TrackPoint {
+        TrackPoint(
+            id: UUID(),
+            sequence: sequence,
+            latitude: 39.9,
+            longitude: longitude,
+            timestamp: date,
+            horizontalAccuracy: 5,
+            systemSpeedMetersPerSecond: 2,
+            segmentIndex: segmentIndex
         )
     }
 }

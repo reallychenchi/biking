@@ -106,20 +106,30 @@ private struct UndoBanner: View {
 }
 
 private struct HistoryRideCard: View {
+    private static let snapshotSize = CGSize(width: 92, height: 92)
+
     let ride: RideRecord
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            HStack {
-                value("骑行时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
-                value("开始时间", RideFormatting.time(ride.startDate))
-                value("总距离", RideFormatting.distance(ride.distanceMeters))
+            RideRouteThumbnail(ride: ride, size: Self.snapshotSize)
+
+            VStack(spacing: 10) {
+                HStack(spacing: 8) {
+                    value("日期", RideFormatting.date(ride.startDate))
+                    value("开始时间", RideFormatting.time(ride.startDate))
+                }
+                HStack(spacing: 8) {
+                    value("总距离", RideFormatting.distance(ride.distanceMeters))
+                    value("平均速度", RideFormatting.speed(ride.averageSpeedMetersPerSecond))
+                }
             }
+
             Image(systemName: "chevron.right")
                 .foregroundStyle(AppTheme.accent)
-                .frame(width: AppTheme.minimumTapSize, height: AppTheme.minimumTapSize)
+                .frame(width: 20, height: AppTheme.minimumTapSize)
         }
-        .padding(16)
+        .padding(12)
         .foregroundStyle(.white)
         .background(AppTheme.panelBackground, in: RoundedRectangle(cornerRadius: 18))
     }
@@ -130,5 +140,58 @@ private struct HistoryRideCard: View {
             Text(text).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct RideRouteThumbnail: View {
+    private enum LoadingState {
+        case loading
+        case loaded(UIImage)
+        case failed
+    }
+
+    let ride: RideRecord
+    let size: CGSize
+    @State private var loadingState = LoadingState.loading
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(AppTheme.pageBackground)
+
+            if case let .loaded(image) = loadingState {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if ride.points.isEmpty {
+                Image(systemName: "map")
+                    .foregroundStyle(AppTheme.secondary)
+                    .accessibilityLabel("无轨迹数据")
+            } else if case .failed = loadingState {
+                Image(systemName: "map.fill")
+                    .foregroundStyle(AppTheme.secondary)
+                    .accessibilityLabel("轨迹图生成失败")
+            } else {
+                ProgressView()
+                    .tint(AppTheme.accent)
+                    .accessibilityLabel("正在生成轨迹图")
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay {
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(.white.opacity(0.08), lineWidth: 1)
+        }
+        .task(id: ride.updatedAt) {
+            guard !ride.points.isEmpty else { return }
+            loadingState = .loading
+            if let image = await RideRouteSnapshotRenderer.shared.image(for: ride, size: size) {
+                loadingState = .loaded(image)
+            } else if !Task.isCancelled {
+                loadingState = .failed
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 }
