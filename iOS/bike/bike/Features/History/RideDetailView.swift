@@ -12,7 +12,6 @@ struct RideDetailView: View {
         }
         .navigationTitle(RideFormatting.date(ride.startDate))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarColorScheme(.dark, for: .navigationBar)
         .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
     }
@@ -59,7 +58,7 @@ private struct RideDetailInfoView: View {
             .padding(.vertical, Layout.sectionSpacing)
         }
         .background(AppTheme.pageBackground.ignoresSafeArea())
-        .foregroundStyle(.white)
+        .foregroundStyle(AppTheme.primaryText)
     }
 
     private var columns: [GridItem] {
@@ -106,7 +105,7 @@ private struct RideDetailInfoView: View {
 
     private func plainDetail(_ title: String, _ text: String) -> some View {
         HStack {
-            Text(title).foregroundStyle(AppTheme.secondary)
+            Text(title).foregroundStyle(AppTheme.secondaryText)
             Spacer()
             Text(text).monospacedDigit()
         }
@@ -157,7 +156,7 @@ private struct RideMetricCard: View {
         VStack(alignment: .leading, spacing: Layout.contentSpacing) {
             Text(metric.title)
                 .font(.subheadline)
-                .foregroundStyle(AppTheme.secondary)
+                .foregroundStyle(AppTheme.secondaryText)
 
             Text(metric.value)
                 .font(.system(size: Layout.valueFontSize, weight: .semibold, design: .rounded))
@@ -172,7 +171,7 @@ private struct RideMetricCard: View {
             if let unit = metric.unit {
                 Text(unit)
                     .font(.subheadline)
-                    .foregroundStyle(AppTheme.secondary)
+                    .foregroundStyle(AppTheme.secondaryText)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }

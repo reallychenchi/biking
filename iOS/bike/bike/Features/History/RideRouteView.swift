@@ -20,7 +20,7 @@ struct RideRouteView: View {
                     ForEach(Array(geometry.segments.enumerated()), id: \.offset) { _, coords in
                         if coords.count >= 2 {
                             MapPolyline(coordinates: coords)
-                                .stroke(AppTheme.accent, lineWidth: 4)
+                                .stroke(AppTheme.accentForeground, lineWidth: 4)
                         }
                     }
                     if let start = geometry.coordinates.first {

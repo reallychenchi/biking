@@ -45,7 +45,7 @@ struct RideView: View {
             ForEach(Array(controller.trackSegments.enumerated()), id: \.offset) { _, segment in
                 if segment.count >= 2 {
                     MapPolyline(coordinates: segment)
-                        .stroke(AppTheme.accent, lineWidth: 6)
+                        .stroke(AppTheme.accentForeground, lineWidth: 6)
                 }
             }
         }
@@ -97,7 +97,7 @@ struct RideView: View {
                 AppTheme.pageBackground
                     .overlay(alignment: .center) {
                         ProgressView()
-                            .tint(AppTheme.accent)
+                            .tint(AppTheme.accentForeground)
                             .scaleEffect(1.5)
                     }
                     .transition(.opacity)
@@ -139,15 +139,15 @@ private struct IdleControlPanel: View {
                 Group {
                     if controller.phase.isBusy {
                         ProgressView()
-                            .tint(.black)
+                            .tint(AppTheme.primaryActionForeground)
                     } else {
                         Text("开始")
                     }
                 }
                 .font(.system(size: 30, weight: .bold))
                 .frame(maxWidth: .infinity, minHeight: AppTheme.primaryButtonHeight)
-                .foregroundStyle(.black)
-                .background(AppTheme.accent, in: RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
+                .foregroundStyle(AppTheme.primaryActionForeground)
+                .background(AppTheme.primaryActionBackground, in: RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
             }
             .disabled(controller.phase.isBusy)
             .accessibilityLabel(controller.phase.isBusy ? "正在准备骑行" : "开始骑行")
@@ -173,7 +173,7 @@ private struct RecordingControlPanel: View {
             if let status = controller.locationStatusMessage {
                 Label(status, systemImage: "location.slash.fill")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(controller.phase == .saveFailed ? AppTheme.destructive : AppTheme.secondary)
+                    .foregroundStyle(controller.phase == .saveFailed ? AppTheme.destructive : AppTheme.secondaryText)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityLabel(status)
@@ -196,16 +196,16 @@ private struct RecordingControlPanel: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("运动时间")
                         .font(.caption)
-                        .foregroundStyle(AppTheme.secondary)
+                        .foregroundStyle(AppTheme.secondaryText)
                     Text(RideFormatting.liveDuration(controller.movingElapsedSeconds))
                         .font(.system(size: 42, weight: .medium, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(AppTheme.accent)
+                        .foregroundStyle(AppTheme.accentForeground)
                         .minimumScaleFactor(0.72)
                     Text("全程时间  \(RideFormatting.fullDuration(controller.totalElapsedSeconds))")
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
-                        .foregroundStyle(AppTheme.secondary)
+                        .foregroundStyle(AppTheme.secondaryText)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
@@ -242,7 +242,7 @@ private struct RecordingControlPanel: View {
             .accessibilityLabel("重试保存骑行")
         case .finishing:
             ProgressView()
-                .tint(.white)
+                .tint(AppTheme.destructiveForeground)
                 .frame(maxWidth: .infinity, minHeight: AppTheme.primaryButtonHeight)
                 .background(AppTheme.destructive.opacity(0.7), in: RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
                 .accessibilityLabel("正在保存骑行")
@@ -260,7 +260,7 @@ private struct RecordingControlPanel: View {
             Text(title)
                 .font(.system(size: 28, weight: .bold))
                 .frame(maxWidth: .infinity, minHeight: AppTheme.primaryButtonHeight)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.destructiveForeground)
                 .background(color, in: RoundedRectangle(cornerRadius: AppTheme.buttonCornerRadius))
         }
     }
@@ -347,11 +347,11 @@ private struct MetricColumn: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
                 .font(.subheadline)
-                .foregroundStyle(AppTheme.secondary)
+                .foregroundStyle(AppTheme.secondaryText)
             Text(value)
                 .font(.system(size: 52, weight: .medium, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.primaryText)
                 .minimumScaleFactor(0.64)
                 .lineLimit(1)
         }

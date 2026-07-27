@@ -1,21 +1,34 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage(AppearancePreference.storageKey) private var appearancePreference = AppearancePreference.system
+
     var body: some View {
         NavigationStack {
             List {
-                NavigationLink {
-                    AboutView()
-                } label: {
-                    Label("关于", systemImage: "info.circle.fill")
+                Section("外观") {
+                    Picker("主题", selection: $appearancePreference) {
+                        ForEach(AppearancePreference.allCases) { preference in
+                            Text(preference.title).tag(preference)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityLabel("主题外观")
                 }
-                .accessibilityLabel("关于骑行")
+
+                Section {
+                    NavigationLink {
+                        AboutView()
+                    } label: {
+                        Label("关于", systemImage: "info.circle.fill")
+                    }
+                    .accessibilityLabel("关于骑行")
+                }
             }
             .scrollContentBackground(.hidden)
             .background(AppTheme.pageBackground)
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
         }
     }
@@ -34,12 +47,12 @@ private struct AboutView: View {
             VStack(spacing: 18) {
                 Image(systemName: "bicycle")
                     .font(.system(size: 64, weight: .semibold))
-                    .foregroundStyle(AppTheme.accent)
+                    .foregroundStyle(AppTheme.accentForeground)
                     .accessibilityHidden(true)
                 Text("骑行")
                     .font(.largeTitle.bold())
                 Text(versionText)
-                    .foregroundStyle(AppTheme.secondary)
+                    .foregroundStyle(AppTheme.secondaryText)
 
                 VStack(alignment: .leading, spacing: 18) {
                     aboutRow(icon: "figure.outdoor.cycle", text: "记录每一次骑行")
@@ -53,7 +66,7 @@ private struct AboutView: View {
             .frame(maxWidth: .infinity)
             .padding(24)
         }
-        .foregroundStyle(.white)
+        .foregroundStyle(AppTheme.primaryText)
         .background(AppTheme.pageBackground.ignoresSafeArea())
         .navigationTitle("关于")
         .navigationBarTitleDisplayMode(.inline)

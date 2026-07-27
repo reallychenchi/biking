@@ -7,7 +7,7 @@ import UIKit
 final class RideRouteSnapshotRenderer {
     static let shared = RideRouteSnapshotRenderer()
 
-    private static let cacheVersion = "v1"
+    private static let cacheVersion = "v2"
     private let memoryCache = NSCache<NSString, UIImage>()
     private let diskCache: RideRouteSnapshotDiskCache
 
@@ -16,9 +16,9 @@ final class RideRouteSnapshotRenderer {
         memoryCache.countLimit = 100
     }
 
-    func image(for ride: RideRecord, size: CGSize) async -> UIImage? {
+    func image(for ride: RideRecord, size: CGSize, appearance: AppAppearance) async -> UIImage? {
         let scale = UIScreen.main.scale
-        let cacheKey = Self.cacheKey(for: ride, size: size, scale: scale)
+        let cacheKey = Self.cacheKey(for: ride, size: size, scale: scale, appearance: appearance)
         let memoryCacheKey = cacheKey as NSString
         if let cachedImage = memoryCache.object(forKey: memoryCacheKey) {
             return cachedImage
@@ -47,12 +47,13 @@ final class RideRouteSnapshotRenderer {
         options.mapType = .standard
         options.showsBuildings = false
         options.pointOfInterestFilter = .excludingAll
-        options.traitCollection = UITraitCollection(userInterfaceStyle: .dark)
+        let traitCollection = UITraitCollection(userInterfaceStyle: appearance.userInterfaceStyle)
+        options.traitCollection = traitCollection
 
         do {
             let snapshot = try await MKMapSnapshotter(options: options).start()
             try Task.checkCancellation()
-            let image = drawRoute(geometry, on: snapshot, size: size)
+            let image = drawRoute(geometry, on: snapshot, size: size, traitCollection: traitCollection)
             memoryCache.setObject(image, forKey: memoryCacheKey)
             if let imageData = image.pngData() {
                 Task { [diskCache] in
@@ -76,15 +77,21 @@ final class RideRouteSnapshotRenderer {
         }
     }
 
-    private static func cacheKey(for ride: RideRecord, size: CGSize, scale: CGFloat) -> String {
+    private static func cacheKey(
+        for ride: RideRecord,
+        size: CGSize,
+        scale: CGFloat,
+        appearance: AppAppearance
+    ) -> String {
         let updatedAtMilliseconds = Int64(ride.updatedAt.timeIntervalSince1970 * 1_000)
-        return "\(cacheVersion)-\(ride.id.uuidString)-\(updatedAtMilliseconds)-\(Int(size.width))x\(Int(size.height))-@\(Int(scale))x"
+        return "\(cacheVersion)-\(appearance.rawValue)-\(ride.id.uuidString)-\(updatedAtMilliseconds)-\(Int(size.width))x\(Int(size.height))-@\(Int(scale))x"
     }
 
     private func drawRoute(
         _ geometry: RideRouteGeometry,
         on snapshot: MKMapSnapshotter.Snapshot,
-        size: CGSize
+        size: CGSize,
+        traitCollection: UITraitCollection
     ) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { context in
@@ -93,7 +100,8 @@ final class RideRouteSnapshotRenderer {
             context.cgContext.setLineCap(.round)
             context.cgContext.setLineJoin(.round)
             context.cgContext.setLineWidth(4)
-            context.cgContext.setStrokeColor(UIColor(AppTheme.accent).cgColor)
+            let routeColor = UIColor(AppTheme.accentForeground).resolvedColor(with: traitCollection)
+            context.cgContext.setStrokeColor(routeColor.cgColor)
 
             for segment in geometry.segments where segment.count >= 2 {
                 let path = UIBezierPath()

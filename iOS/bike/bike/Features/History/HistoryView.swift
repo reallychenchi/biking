@@ -39,13 +39,12 @@ struct HistoryView: View {
             .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("历史")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
             .overlay(alignment: .top) {
                 if let error = library.errorMessage {
                     Text(error)
                         .font(.caption)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.destructiveForeground)
                         .padding(10)
                         .background(AppTheme.destructive, in: Capsule())
                         .padding(.top, 8)
@@ -70,15 +69,15 @@ struct HistoryView: View {
     private var emptyState: some View {
         ContentUnavailableView {
             Label("还没有骑行记录", systemImage: "bicycle")
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.primaryText)
         } description: {
             Text("前往骑行页面，开始记录第一次骑行。")
-                .foregroundStyle(AppTheme.secondary)
+                .foregroundStyle(AppTheme.secondaryText)
         } actions: {
             Button("开始骑行", action: startFirstRide)
                 .buttonStyle(.borderedProminent)
-                .tint(AppTheme.accent)
-                .foregroundStyle(.black)
+                .tint(AppTheme.primaryActionBackground)
+                .foregroundStyle(AppTheme.primaryActionForeground)
                 .accessibilityLabel("前往骑行页面")
         }
     }
@@ -92,11 +91,11 @@ private struct UndoBanner: View {
         HStack(spacing: 12) {
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.primaryText)
             Spacer()
             Button("撤销", action: undo)
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.accent)
+                .foregroundStyle(AppTheme.accentForeground)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -126,17 +125,17 @@ private struct HistoryRideCard: View {
             }
 
             Image(systemName: "chevron.right")
-                .foregroundStyle(AppTheme.accent)
+                .foregroundStyle(AppTheme.accentForeground)
                 .frame(width: 20, height: AppTheme.minimumTapSize)
         }
         .padding(12)
-        .foregroundStyle(.white)
+        .foregroundStyle(AppTheme.primaryText)
         .background(AppTheme.panelBackground, in: RoundedRectangle(cornerRadius: 18))
     }
 
     private func value(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption).foregroundStyle(AppTheme.secondary)
+            Text(title).font(.caption).foregroundStyle(AppTheme.secondaryText)
             Text(text).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -144,6 +143,11 @@ private struct HistoryRideCard: View {
 }
 
 private struct RideRouteThumbnail: View {
+    private struct TaskID: Hashable {
+        let updatedAt: Date
+        let appearance: AppAppearance
+    }
+
     private enum LoadingState {
         case loading
         case loaded(UIImage)
@@ -152,7 +156,12 @@ private struct RideRouteThumbnail: View {
 
     let ride: RideRecord
     let size: CGSize
+    @Environment(\.colorScheme) private var colorScheme
     @State private var loadingState = LoadingState.loading
+
+    private var appearance: AppAppearance {
+        AppAppearance(colorScheme: colorScheme)
+    }
 
     var body: some View {
         ZStack {
@@ -165,15 +174,15 @@ private struct RideRouteThumbnail: View {
                     .scaledToFill()
             } else if ride.points.isEmpty {
                 Image(systemName: "map")
-                    .foregroundStyle(AppTheme.secondary)
+                    .foregroundStyle(AppTheme.secondaryText)
                     .accessibilityLabel("无轨迹数据")
             } else if case .failed = loadingState {
                 Image(systemName: "map.fill")
-                    .foregroundStyle(AppTheme.secondary)
+                    .foregroundStyle(AppTheme.secondaryText)
                     .accessibilityLabel("轨迹图生成失败")
             } else {
                 ProgressView()
-                    .tint(AppTheme.accent)
+                    .tint(AppTheme.accentForeground)
                     .accessibilityLabel("正在生成轨迹图")
             }
         }
@@ -181,12 +190,16 @@ private struct RideRouteThumbnail: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay {
             RoundedRectangle(cornerRadius: 12)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .stroke(AppTheme.separator.opacity(0.35), lineWidth: 1)
         }
-        .task(id: ride.updatedAt) {
+        .task(id: TaskID(updatedAt: ride.updatedAt, appearance: appearance)) {
             guard !ride.points.isEmpty else { return }
             loadingState = .loading
-            if let image = await RideRouteSnapshotRenderer.shared.image(for: ride, size: size) {
+            if let image = await RideRouteSnapshotRenderer.shared.image(
+                for: ride,
+                size: size,
+                appearance: appearance
+            ) {
                 loadingState = .loaded(image)
             } else if !Task.isCancelled {
                 loadingState = .failed

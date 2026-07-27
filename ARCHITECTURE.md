@@ -17,7 +17,7 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 | 根界面与生命周期桥接 | 组装骑行、历史、设置三个 Tab；把前后台事件转交骑行控制器 | `iOS/bike/bike/ContentView.swift` |
 | 骑行功能 | 管理骑行状态机、运行任务、实时地图和指标、开始/结束/重试交互 | `iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Features/Ride/RideView.swift` |
 | 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
-| 设置功能 | 展示关于页和本地数据/定位用途说明 | `iOS/bike/bike/Features/Settings/SettingsView.swift` |
+| 设置功能 | 在当前页面切换并持久化主题偏好；展示关于页和本地数据/定位用途说明 | `iOS/bike/bike/Features/Settings/SettingsView.swift` |
 | 核心领域 | 定义骑行、轨迹点、进度、完成快照和指标公式 | `iOS/bike/bike/Domain/RideModels.swift` |
 | 定位校验与指标累计 | 校验位置/速度/轨迹段，累计带迟滞与超时规则的运动时间；过滤、平滑并累计海拔趋势 | `iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift` |
 | 展示格式 | 将米、米每秒、秒和日期转换为 UI 文本 | `iOS/bike/bike/Domain/RideFormatting.swift` |
@@ -26,7 +26,7 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 | 日志 | 提供 ride、location、persistence 等 OSLog 分类 | `iOS/bike/bike/Services/AppLog.swift` |
 | 持久化契约 | 定义业务所需的骑行写入、查询与删除接口 | `iOS/bike/bike/Persistence/RideRepository.swift` |
 | SwiftData 实现 | 以 actor 隔离 ModelContext，映射领域模型与持久化实体 | `iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`、`iOS/bike/bike/Persistence/RideEntities.swift` |
-| 视觉设计 | 集中维护颜色、尺寸等界面常量 | `iOS/bike/bike/Design/AppTheme.swift` |
+| 视觉设计 | 集中维护自适应语义色、外观映射和尺寸常量；需要精确品牌值的浅色/深色变体由 Asset Catalog 提供 | `iOS/bike/bike/Design/AppTheme.swift`、`iOS/bike/bike/Assets.xcassets/` |
 | 第三方依赖 | CocoaPods 管理友盟 `UMCommon`、`UMAPM`、`UMDevice`；版本锁定在 lockfile | `iOS/bike/Podfile`、`iOS/bike/Podfile.lock` |
 | 测试入口 | Swift Testing 覆盖领域、仓储和控制器；XCTest 覆盖主导航、关于页、启动和截图 | `iOS/bike/bikeTests/bikeTests.swift`、`iOS/bike/bikeUITests/bikeUITests.swift`、`iOS/bike/bikeUITests/bikeUITestsLaunchTests.swift` |
 

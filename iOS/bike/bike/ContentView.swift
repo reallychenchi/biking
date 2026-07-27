@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AppearancePreference.storageKey) private var appearancePreference = AppearancePreference.system
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -32,10 +33,10 @@ struct ContentView: View {
                 .tabItem { Label("设置", systemImage: "gearshape.fill") }
                 .tag(AppTab.settings)
         }
-        .tint(AppTheme.accent)
+        .tint(AppTheme.accentForeground)
         .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(appearancePreference.preferredColorScheme)
         .task { await appModel.start() }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
