@@ -297,7 +297,7 @@ struct bikeTests {
 
     @Test
     func externalSpeedZoneLabelsMoveAwayFromCenterAndKeepMinimumSpacing() {
-        let spacing: CGFloat = 28
+        let spacing: CGFloat = 14
         let centerY: CGFloat = 100
         let naturalPositions: [CGFloat] = [90, 95, 105, 110]
         let positions = OutwardVerticalLabelLayout.positions(

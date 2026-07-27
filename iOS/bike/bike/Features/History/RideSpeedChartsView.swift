@@ -8,7 +8,7 @@ struct RideSpeedChartsView: View {
         static let speedZoneWidthRadiusRatio: CGFloat = 0.27
         static let sectionSpacing: CGFloat = 28
         static let smallZoneThreshold = 0.10
-        static let externalLabelSpacing: CGFloat = 28
+        static let externalLabelSpacing: CGFloat = 14
         static let externalLabelRadiusOffset: CGFloat = 12
         static let externalLeaderMinimumLength: CGFloat = 10
         static let externalLabelHorizontalMargin: CGFloat = 2
