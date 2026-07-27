@@ -4,9 +4,15 @@ import SwiftUI
 struct RideSpeedChartsView: View {
     private enum Layout {
         static let chartHeight: CGFloat = 240
+        static let speedZoneOuterRadiusRatio: CGFloat = 0.31
+        static let speedZoneWidthRadiusRatio: CGFloat = 0.27
         static let sectionSpacing: CGFloat = 28
         static let smallZoneThreshold = 0.10
         static let externalLabelSpacing: CGFloat = 28
+        static let externalLabelRadiusOffset: CGFloat = 12
+        static let externalLeaderMinimumLength: CGFloat = 10
+        static let externalLabelHorizontalMargin: CGFloat = 2
+        static let externalLeaderTextSpacing: CGFloat = 4
     }
 
     private static let zoneColors = [
@@ -86,11 +92,16 @@ struct RideSpeedChartsView: View {
             subtitle: "各速度区间对应的有效骑行距离占比"
         ) {
             if analysis.classifiedDistanceMeters > 0 {
+                let geometry = speedZoneChartGeometry
                 ZStack {
                     Canvas { context, size in
-                        drawSpeedZoneDonut(context: &context, size: size)
+                        drawSpeedZoneDonut(
+                            context: &context,
+                            size: size,
+                            centerY: geometry.centerY
+                        )
                     }
-                    .frame(height: Layout.chartHeight)
+                    .frame(height: geometry.height)
                     .accessibilityLabel("速度区间距离占比圆环图")
                     .accessibilityValue(zoneChartAccessibilityValue)
 
@@ -102,6 +113,7 @@ struct RideSpeedChartsView: View {
                             .font(.caption)
                             .foregroundStyle(AppTheme.secondaryText)
                     }
+                    .offset(y: geometry.centerY - geometry.height / 2)
                     .accessibilityHidden(true)
                 }
 
@@ -147,9 +159,50 @@ struct RideSpeedChartsView: View {
         }.joined(separator: "，")
     }
 
-    private func drawSpeedZoneDonut(context: inout GraphicsContext, size: CGSize) {
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let outerRadius = min(size.height * 0.31, size.width * 0.27)
+    private var speedZoneChartGeometry: SpeedZoneChartGeometry {
+        let baseCenterY = Layout.chartHeight / 2
+        let referenceOuterRadius = Layout.chartHeight * Layout.speedZoneOuterRadiusRatio
+        let externalSectors = makeSectorLayouts().filter {
+            $0.share.proportion < Layout.smallZoneThreshold
+        }
+        let labelRadii = [
+            referenceOuterRadius + Layout.externalLabelRadiusOffset,
+            Layout.externalLabelRadiusOffset
+        ]
+        let positions = labelRadii.flatMap { labelRadius in
+            let naturalLayouts = externalSectors.map { sector in
+                SpeedZoneExternalLabelLayout(
+                    sector: sector,
+                    isRightSide: cos(sector.midAngle) >= 0,
+                    naturalY: baseCenterY
+                        + labelRadius * CGFloat(sin(sector.midAngle)),
+                    labelY: baseCenterY
+                )
+            }
+            return [false, true].flatMap { isRightSide in
+                distributedExternalLabels(
+                    naturalLayouts.filter { $0.isRightSide == isRightSide },
+                    centerY: baseCenterY
+                ).map(\.labelY)
+            }
+        }
+        return SpeedZoneChartGeometry.make(
+            baseHeight: Layout.chartHeight,
+            labelYPositions: positions,
+            verticalMargin: Layout.externalLabelSpacing / 2
+        )
+    }
+
+    private func drawSpeedZoneDonut(
+        context: inout GraphicsContext,
+        size: CGSize,
+        centerY: CGFloat
+    ) {
+        let center = CGPoint(x: size.width / 2, y: centerY)
+        let outerRadius = min(
+            Layout.chartHeight * Layout.speedZoneOuterRadiusRatio,
+            size.width * Layout.speedZoneWidthRadiusRatio
+        )
         let innerRadius = outerRadius * 0.60
         let sectors = makeSectorLayouts()
 
@@ -226,7 +279,11 @@ struct RideSpeedChartsView: View {
         outerRadius: CGFloat
     ) {
         let naturalLayouts = sectors.map { sector in
-            let target = point(center: center, radius: outerRadius + 12, angle: sector.midAngle)
+            let target = point(
+                center: center,
+                radius: outerRadius + Layout.externalLabelRadiusOffset,
+                angle: sector.midAngle
+            )
             return SpeedZoneExternalLabelLayout(
                 sector: sector,
                 isRightSide: cos(sector.midAngle) >= 0,
@@ -236,47 +293,111 @@ struct RideSpeedChartsView: View {
         }
         let leftLayouts = distributedExternalLabels(
             naturalLayouts.filter { !$0.isRightSide },
-            height: size.height
+            centerY: center.y
         )
         let rightLayouts = distributedExternalLabels(
             naturalLayouts.filter(\.isRightSide),
-            height: size.height
+            centerY: center.y
         )
 
-        for layout in leftLayouts + rightLayouts {
-            let direction: CGFloat = layout.isRightSide ? 1 : -1
+        drawExternalZoneLabels(
+            leftLayouts,
+            context: &context,
+            size: size,
+            center: center,
+            outerRadius: outerRadius
+        )
+        drawExternalZoneLabels(
+            rightLayouts,
+            context: &context,
+            size: size,
+            center: center,
+            outerRadius: outerRadius
+        )
+    }
+
+    private func drawExternalZoneLabels(
+        _ layouts: [SpeedZoneExternalLabelLayout],
+        context: inout GraphicsContext,
+        size: CGSize,
+        center: CGPoint,
+        outerRadius: CGFloat
+    ) {
+        guard let firstLayout = layouts.first else { return }
+        let isRightSide = firstLayout.isRightSide
+        let direction: CGFloat = isRightSide ? 1 : -1
+        let maximumTextWidth = layouts.map { layout in
+            let resolvedText = context.resolve(externalLabelText(for: layout))
+            return resolvedText.measure(
+                in: CGSize(width: size.width, height: Layout.externalLabelSpacing)
+            ).width
+        }.max() ?? 0
+        let routingX: CGFloat
+        if isRightSide {
+            routingX = size.width
+                - Layout.externalLabelHorizontalMargin
+                - maximumTextWidth
+                - Layout.externalLeaderTextSpacing
+        } else {
+            routingX = Layout.externalLabelHorizontalMargin
+                + maximumTextWidth
+                + Layout.externalLeaderTextSpacing
+        }
+        let usesRoutingLane = layouts.contains { layout in
+            let elbow = externalLeaderElbow(
+                center: center,
+                outerRadius: outerRadius,
+                angle: layout.sector.midAngle,
+                labelY: layout.labelY
+            )
+            return isRightSide ? elbow.x > routingX : elbow.x < routingX
+        }
+
+        for layout in layouts {
             let anchorPoint = point(
                 center: center,
                 radius: outerRadius,
                 angle: layout.sector.midAngle
             )
-            let radialPoint = point(
-                center: center,
-                radius: outerRadius + 10,
-                angle: layout.sector.midAngle
-            )
-            let text = Text(zoneLabel(for: layout.sector.share))
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(.black)
-            let resolvedText = context.resolve(text)
+            let resolvedText = context.resolve(externalLabelText(for: layout))
             let textSize = resolvedText.measure(
                 in: CGSize(width: size.width, height: Layout.externalLabelSpacing)
             )
-            let horizontalMargin: CGFloat = 2
             let halfTextWidth = textSize.width / 2
             let labelCenterX: CGFloat
             if layout.isRightSide {
-                labelCenterX = size.width - horizontalMargin - halfTextWidth
+                labelCenterX = size.width
+                    - Layout.externalLabelHorizontalMargin
+                    - halfTextWidth
             } else {
-                labelCenterX = horizontalMargin + halfTextWidth
+                labelCenterX = Layout.externalLabelHorizontalMargin + halfTextWidth
             }
             let lineEnd = CGPoint(
-                x: labelCenterX - direction * (halfTextWidth + 4),
+                x: labelCenterX
+                    - direction * (halfTextWidth + Layout.externalLeaderTextSpacing),
                 y: layout.labelY
+            )
+            let radialPoint = externalLeaderElbow(
+                center: center,
+                outerRadius: outerRadius,
+                angle: layout.sector.midAngle,
+                labelY: layout.labelY
             )
             var leaderPath = Path()
             leaderPath.move(to: anchorPoint)
-            leaderPath.addLine(to: radialPoint)
+            if usesRoutingLane {
+                let radialStub = point(
+                    center: center,
+                    radius: outerRadius + Layout.externalLeaderMinimumLength,
+                    angle: layout.sector.midAngle
+                )
+                leaderPath.addLine(to: radialStub)
+                leaderPath.addLine(
+                    to: CGPoint(x: routingX, y: layout.labelY)
+                )
+            } else {
+                leaderPath.addLine(to: radialPoint)
+            }
             leaderPath.addLine(to: lineEnd)
             context.stroke(
                 leaderPath,
@@ -292,21 +413,44 @@ struct RideSpeedChartsView: View {
         }
     }
 
+    private func externalLabelText(
+        for layout: SpeedZoneExternalLabelLayout
+    ) -> Text {
+        Text(zoneLabel(for: layout.sector.share))
+            .font(.system(size: 8, weight: .semibold))
+            .foregroundStyle(.black)
+    }
+
     private func distributedExternalLabels(
         _ layouts: [SpeedZoneExternalLabelLayout],
-        height: CGFloat
+        centerY: CGFloat
     ) -> [SpeedZoneExternalLabelLayout] {
         guard !layouts.isEmpty else { return [] }
         var result = layouts.sorted { $0.naturalY < $1.naturalY }
-        let positions = NonOverlappingVerticalLabelLayout.positions(
+        let positions = OutwardVerticalLabelLayout.positions(
             naturalYPositions: result.map(\.naturalY),
-            height: height,
+            centerY: centerY,
             spacing: Layout.externalLabelSpacing
         )
         for index in result.indices {
             result[index].labelY = positions[index]
         }
         return result
+    }
+
+    private func externalLeaderElbow(
+        center: CGPoint,
+        outerRadius: CGFloat,
+        angle: Double,
+        labelY: CGFloat
+    ) -> CGPoint {
+        RadialLeaderGeometry.elbow(
+            center: center,
+            outerRadius: outerRadius,
+            minimumLength: Layout.externalLeaderMinimumLength,
+            angle: angle,
+            labelY: labelY
+        )
     }
 
     private func point(center: CGPoint, radius: CGFloat, angle: Double) -> CGPoint {
@@ -353,34 +497,111 @@ private struct SpeedZoneExternalLabelLayout {
     var labelY: CGFloat
 }
 
-struct NonOverlappingVerticalLabelLayout {
+enum OutwardVerticalLabelLayout {
     static func positions(
         naturalYPositions: [CGFloat],
-        height: CGFloat,
+        centerY: CGFloat,
         spacing: CGFloat
     ) -> [CGFloat] {
         guard !naturalYPositions.isEmpty else { return [] }
-        let minimumY = spacing / 2
-        let maximumY = height - spacing / 2
         var positions = naturalYPositions
-
-        positions[0] = max(minimumY, positions[0])
-        for index in positions.indices.dropFirst() {
-            positions[index] = max(positions[index], positions[index - 1] + spacing)
+        let upperIndices = positions.indices.filter {
+            naturalYPositions[$0] < centerY
+        }
+        let lowerIndices = positions.indices.filter {
+            naturalYPositions[$0] >= centerY
         }
 
-        if let lastIndex = positions.indices.last, positions[lastIndex] > maximumY {
-            positions[lastIndex] = maximumY
-            for index in positions.indices.dropLast().reversed() {
-                positions[index] = min(positions[index], positions[index + 1] - spacing)
+        if upperIndices.count > 1 {
+            for offset in stride(from: upperIndices.count - 2, through: 0, by: -1) {
+                let index = upperIndices[offset]
+                let lowerIndex = upperIndices[offset + 1]
+                positions[index] = min(
+                    naturalYPositions[index],
+                    positions[lowerIndex] - spacing
+                )
             }
         }
 
-        if positions[0] < minimumY {
-            let offset = minimumY - positions[0]
-            positions = positions.map { $0 + offset }
+        if lowerIndices.count > 1 {
+            for offset in 1..<lowerIndices.count {
+                let index = lowerIndices[offset]
+                let upperIndex = lowerIndices[offset - 1]
+                positions[index] = max(
+                    naturalYPositions[index],
+                    positions[upperIndex] + spacing
+                )
+            }
         }
+
+        if let upperIndex = upperIndices.last,
+           let lowerIndex = lowerIndices.first {
+            let gap = positions[lowerIndex] - positions[upperIndex]
+            if gap < spacing {
+                let offset = spacing - gap
+                for index in upperIndices {
+                    positions[index] -= offset
+                }
+            }
+        }
+
         return positions
+    }
+}
+
+struct SpeedZoneChartGeometry {
+    let height: CGFloat
+    let centerY: CGFloat
+
+    static func make(
+        baseHeight: CGFloat,
+        labelYPositions: [CGFloat],
+        verticalMargin: CGFloat
+    ) -> SpeedZoneChartGeometry {
+        let minimumLabelY = labelYPositions.min() ?? verticalMargin
+        let maximumLabelY = labelYPositions.max() ?? baseHeight - verticalMargin
+        let topInset = max(0, verticalMargin - minimumLabelY)
+        let bottomInset = max(
+            0,
+            maximumLabelY + verticalMargin - baseHeight
+        )
+        return SpeedZoneChartGeometry(
+            height: baseHeight + topInset + bottomInset,
+            centerY: baseHeight / 2 + topInset
+        )
+    }
+}
+
+enum RadialLeaderGeometry {
+    static func elbow(
+        center: CGPoint,
+        outerRadius: CGFloat,
+        minimumLength: CGFloat,
+        angle: Double,
+        labelY: CGFloat
+    ) -> CGPoint {
+        let sine = CGFloat(sin(angle))
+        let minimumRadius = outerRadius + minimumLength
+        guard abs(sine) > .ulpOfOne else {
+            return point(center: center, radius: minimumRadius, angle: angle)
+        }
+        let requiredRadius = (labelY - center.y) / sine
+        return point(
+            center: center,
+            radius: max(minimumRadius, requiredRadius),
+            angle: angle
+        )
+    }
+
+    private static func point(
+        center: CGPoint,
+        radius: CGFloat,
+        angle: Double
+    ) -> CGPoint {
+        CGPoint(
+            x: center.x + radius * CGFloat(cos(angle)),
+            y: center.y + radius * CGFloat(sin(angle))
+        )
     }
 }
 

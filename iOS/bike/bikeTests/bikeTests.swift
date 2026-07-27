@@ -296,21 +296,59 @@ struct bikeTests {
     }
 
     @Test
-    func externalSpeedZoneLabelsKeepOrderAndMinimumSpacing() {
+    func externalSpeedZoneLabelsMoveAwayFromCenterAndKeepMinimumSpacing() {
         let spacing: CGFloat = 28
-        let height: CGFloat = 160
-        let positions = NonOverlappingVerticalLabelLayout.positions(
-            naturalYPositions: [75, 76, 77, 78, 79],
-            height: height,
+        let centerY: CGFloat = 100
+        let naturalPositions: [CGFloat] = [90, 95, 105, 110]
+        let positions = OutwardVerticalLabelLayout.positions(
+            naturalYPositions: naturalPositions,
+            centerY: centerY,
             spacing: spacing
         )
 
-        #expect(positions.count == 5)
-        #expect((positions.first ?? 0) >= spacing / 2)
-        #expect((positions.last ?? height) <= height - spacing / 2)
+        #expect(positions.count == naturalPositions.count)
         for pair in zip(positions, positions.dropFirst()) {
             #expect(pair.1 - pair.0 >= spacing)
         }
+        #expect(positions[0] <= naturalPositions[0])
+        #expect(positions[1] <= naturalPositions[1])
+        #expect(positions[2] >= naturalPositions[2])
+        #expect(positions[3] >= naturalPositions[3])
+    }
+
+    @Test
+    func speedZoneChartGeometryExpandsAroundFixedCircleCenter() {
+        let geometry = SpeedZoneChartGeometry.make(
+            baseHeight: 240,
+            labelYPositions: [-10, 260],
+            verticalMargin: 14
+        )
+
+        #expect(geometry.height == 298)
+        #expect(geometry.centerY == 144)
+    }
+
+    @Test
+    func externalSpeedZoneLeaderUsesRadialThenHorizontalGeometry() {
+        let center = CGPoint(x: 150, y: 120)
+        let angle = -Double.pi / 4
+        let labelY: CGFloat = 40
+        let elbow = RadialLeaderGeometry.elbow(
+            center: center,
+            outerRadius: 70,
+            minimumLength: 10,
+            angle: angle,
+            labelY: labelY
+        )
+        let vector = CGVector(dx: elbow.x - center.x, dy: elbow.y - center.y)
+        let crossProduct = vector.dx * CGFloat(sin(angle))
+            - vector.dy * CGFloat(cos(angle))
+        let dotProduct = vector.dx * CGFloat(cos(angle))
+            + vector.dy * CGFloat(sin(angle))
+
+        #expect(abs(elbow.y - labelY) < 0.001)
+        #expect(abs(crossProduct) < 0.001)
+        #expect(dotProduct >= 80)
     }
 
     @Test
