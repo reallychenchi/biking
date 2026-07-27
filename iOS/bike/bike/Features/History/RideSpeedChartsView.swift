@@ -266,7 +266,7 @@ struct RideSpeedChartsView: View {
             let position = point(center: center, radius: radius, angle: sector.midAngle)
             let text = Text(zoneLabel(for: sector.share))
                 .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(.black)
+                .foregroundStyle(AppTheme.primaryText)
             context.draw(text, at: position, anchor: .center)
         }
     }
@@ -401,7 +401,7 @@ struct RideSpeedChartsView: View {
             leaderPath.addLine(to: lineEnd)
             context.stroke(
                 leaderPath,
-                with: .color(Color(uiColor: .systemGray)),
+                with: .color(AppTheme.secondaryText),
                 lineWidth: 1.5
             )
 
@@ -418,7 +418,7 @@ struct RideSpeedChartsView: View {
     ) -> Text {
         Text(zoneLabel(for: layout.sector.share))
             .font(.system(size: 8, weight: .semibold))
-            .foregroundStyle(.black)
+            .foregroundStyle(AppTheme.primaryText)
     }
 
     private func distributedExternalLabels(
