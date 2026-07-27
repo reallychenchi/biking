@@ -72,6 +72,7 @@ private struct RideDetailInfoView: View {
     private enum Unit {
         static let speed = "km/h"
         static let distance = "km"
+        static let duration = "小时:分钟"
         static let elevation = "m"
     }
 
@@ -146,11 +147,13 @@ private struct RideDetailInfoView: View {
             ),
             RideDetailMetric(
                 title: "全程时间",
-                value: RideFormatting.hourMinuteDuration(ride.totalElapsedSeconds)
+                value: RideFormatting.hourMinuteDuration(ride.totalElapsedSeconds),
+                unit: Unit.duration
             ),
             RideDetailMetric(
                 title: "运动时间",
-                value: RideFormatting.hourMinuteDuration(ride.movingElapsedSeconds)
+                value: RideFormatting.hourMinuteDuration(ride.movingElapsedSeconds),
+                unit: Unit.duration
             ),
             elevationMetric(title: "累积上升", meters: ride.cumulativeAscentMeters),
             elevationMetric(title: "累积下降", meters: ride.cumulativeDescentMeters)
