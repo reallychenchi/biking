@@ -72,6 +72,10 @@ actor SwiftDataRideRepository: RideRepository {
         ride.maximumSpeedMetersPerSecond = progress.maximumSpeedMetersPerSecond
         ride.overallSpeedMetersPerSecond = progress.overallSpeedMetersPerSecond
         ride.averageSpeedMetersPerSecond = progress.averageSpeedMetersPerSecond
+        ride.cumulativeAscentMeters = progress.cumulativeAscentMeters
+        ride.cumulativeDescentMeters = progress.cumulativeDescentMeters
+        ride.minimumAltitudeMeters = progress.minimumAltitudeMeters
+        ride.maximumAltitudeMeters = progress.maximumAltitudeMeters
         ride.updatedAt = progress.updatedAt
     }
 
@@ -90,6 +94,10 @@ actor SwiftDataRideRepository: RideRepository {
             maximumSpeedMetersPerSecond: entity.maximumSpeedMetersPerSecond,
             overallSpeedMetersPerSecond: entity.overallSpeedMetersPerSecond,
             averageSpeedMetersPerSecond: entity.averageSpeedMetersPerSecond,
+            cumulativeAscentMeters: entity.cumulativeAscentMeters,
+            cumulativeDescentMeters: entity.cumulativeDescentMeters,
+            minimumAltitudeMeters: entity.minimumAltitudeMeters,
+            maximumAltitudeMeters: entity.maximumAltitudeMeters,
             createdAt: entity.createdAt,
             updatedAt: entity.updatedAt,
             points: entity.points.map(\.domainModel).sorted { $0.sequence < $1.sequence }

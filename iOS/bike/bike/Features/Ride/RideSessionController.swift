@@ -47,6 +47,7 @@ final class RideSessionController {
         let startInstant: ContinuousClock.Instant
         var validator = LocationSampleValidator()
         var movementTime = MovementTimeAccumulator()
+        var elevation = ElevationAccumulator()
         var pendingPoints: [TrackPoint] = []
         var segments: [[CLLocationCoordinate2D]] = []
         var distanceMeters = 0.0
@@ -178,6 +179,9 @@ final class RideSessionController {
 
         let now = Date()
         let progress = makeProgress(from: activeRide, updatedAt: now)
+        if progress.minimumAltitudeMeters == nil {
+            AppLog.location.warning("Ride completed without valid elevation samples")
+        }
         pendingCompletion = RideCompletionSnapshot(rideID: activeRide.id, endDate: now, progress: progress)
         await saveCompletion()
     }
@@ -270,6 +274,7 @@ final class RideSessionController {
             activeRide.pendingPoints.append(accepted.point)
             activeRide.distanceMeters += accepted.distanceFromPreviousMeters
             activeRide.latestAcceptedLocationDate = accepted.point.timestamp
+            activeRide.elevation.consume(accepted.point)
 
             if accepted.startedNewSegment {
                 activeRide.segments.append([accepted.point.coordinate])
@@ -358,6 +363,7 @@ final class RideSessionController {
         let totalElapsed = elapsed(from: ride.startInstant)
         var movementTime = ride.movementTime
         let movingElapsed = movementTime.elapsed(at: totalElapsed)
+        let elevation = ride.elevation.metrics()
         return RideProgress(
             totalElapsedSeconds: totalElapsed,
             movingElapsedSeconds: movingElapsed,
@@ -371,6 +377,10 @@ final class RideSessionController {
                 distanceMeters: ride.distanceMeters,
                 durationSeconds: movingElapsed
             ),
+            cumulativeAscentMeters: elevation.cumulativeAscentMeters,
+            cumulativeDescentMeters: elevation.cumulativeDescentMeters,
+            minimumAltitudeMeters: elevation.minimumAltitudeMeters,
+            maximumAltitudeMeters: elevation.maximumAltitudeMeters,
             updatedAt: updatedAt
         )
     }

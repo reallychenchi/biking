@@ -88,6 +88,8 @@ struct LocationSampleValidator: Sendable {
             timestamp: sample.timestamp,
             horizontalAccuracy: sample.horizontalAccuracy,
             systemSpeedMetersPerSecond: driftDiscarded ? nil : validSystemSpeed,
+            altitudeMeters: sample.altitudeMeters,
+            verticalAccuracyMeters: sample.verticalAccuracyMeters,
             segmentIndex: segmentIndex
         )
         nextSequence += 1

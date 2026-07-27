@@ -4,7 +4,7 @@
 
 ## 系统目标
 
-Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算轨迹、距离、全程时间、运动时间与速度，将完成的骑行保存在设备，并展示历史详情和轨迹。应用界面和业务代码位于 `iOS/bike/bike/`，产品基线位于 `docs/iOS骑行App需求文档.md`。
+Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算轨迹、距离、全程时间、运动时间、速度与海拔统计，将完成的骑行保存在设备，并展示历史详情和轨迹。应用界面和业务代码位于 `iOS/bike/bike/`，产品基线位于 `docs/iOS骑行App需求文档.md`。
 
 工程当前包含一个 App target、一个 Swift Testing 单元测试 target 和一个 XCTest UI 测试 target，定义在 `iOS/bike/bike.xcodeproj/project.pbxproj`。它们是 Xcode targets；`Domain/`、`Features/`、`Persistence/` 等只是同一 App target 内的源码目录，不是独立 Swift modules。
 
@@ -19,7 +19,7 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 | 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
 | 设置功能 | 展示关于页和本地数据/定位用途说明 | `iOS/bike/bike/Features/Settings/SettingsView.swift` |
 | 核心领域 | 定义骑行、轨迹点、进度、完成快照和指标公式 | `iOS/bike/bike/Domain/RideModels.swift` |
-| 定位校验与运动计时 | 校验位置/速度/轨迹段，累计带迟滞与超时规则的运动时间 | `iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift` |
+| 定位校验与指标累计 | 校验位置/速度/轨迹段，累计带迟滞与超时规则的运动时间；过滤、平滑并累计海拔趋势 | `iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift` |
 | 展示格式 | 将米、米每秒、秒和日期转换为 UI 文本 | `iOS/bike/bike/Domain/RideFormatting.swift` |
 | 定位服务 | 请求定位权限和临时精确定位；通过 `CLLocationUpdate` 输出异步更新；维护后台活动会话 | `iOS/bike/bike/Services/RideTrackingService.swift` |
 | 网络状态 | 只通过 `NWPathMonitor` 发布离线状态；仓库没有自建 HTTP/API 客户端 | `iOS/bike/bike/Services/NetworkStatusMonitor.swift` |
@@ -75,7 +75,7 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 1. `RideView` 调用 `RideSessionController.startRide()`（`iOS/bike/bike/Features/Ride/RideView.swift`）。
 2. 控制器先通过 `RideTrackingProviding.prepareForRide()` 检查服务、授权与精确定位，再创建 SwiftData 临时骑行；任一步失败都显示错误并停止（`iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Services/RideTrackingService.swift`）。
 3. 控制器启动 1 秒计时任务、5 秒 checkpoint 任务和定位异步流，并创建后台定位活动（`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
-4. 每个样本先经过 `LocationSampleValidator`；有效点进入内存中的 pendingPoints/segments，更新距离、速度与 `MovementTimeAccumulator`（`iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
+4. 每个样本先经过 `LocationSampleValidator`；有效水平点进入内存中的 pendingPoints/segments，更新距离、速度与 `MovementTimeAccumulator`，其海拔再由 `ElevationAccumulator` 独立进行垂直精度过滤、三点中值平滑和趋势累计（`iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift`、`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
 5. checkpoint 将待写点和指标通过仓储增量写入；成功后才从内存队列移除，失败则保留并展示警告（`iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
 
 ### 3. 结束、保存与失败重试
@@ -100,6 +100,7 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 | 数据 | 权威所有者与生命周期 | 代码路径 |
 | --- | --- | --- |
 | 已完成/未完成骑行与轨迹点 | SwiftData `ModelContainer`；`RideEntity` 拥有 `TrackPointEntity`，删除规则为 cascade | `iOS/bike/bike/bikeApp.swift`、`iOS/bike/bike/Persistence/RideEntities.swift` |
+| 海拔原始值与完成统计 | `TrackPointEntity` 保存可选海拔/垂直精度，`RideEntity` 保存可选累积升降和最低/最高海拔；旧记录不回填 `0` | `iOS/bike/bike/Domain/ElevationAccumulator.swift`、`iOS/bike/bike/Persistence/RideEntities.swift` |
 | 活跃骑行运行态 | `RideSessionController.ActiveRide`；仅存在于进程内，pendingPoints 通过 checkpoint/完成保存转移到仓储 | `iOS/bike/bike/Features/Ride/RideSessionController.swift` |
 | 历史页面投影与撤销窗口 | `RideLibrary`；`rides` 是仓储读取投影，pendingDelete 是 4 秒 UI 事务状态 | `iOS/bike/bike/Features/History/RideLibrary.swift` |
 | Tab、异常骑行提示 | `AppModel` 的进程内状态 | `iOS/bike/bike/AppModel.swift` |
@@ -124,6 +125,7 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 - 新存储或同步实现：实现 `RideRepository`，在 `bikeApp.init()` 替换组合；同步冲突、认证和远端数据所有权需另行设计（`iOS/bike/bike/Persistence/RideRepository.swift`、`iOS/bike/bike/bikeApp.swift`）。
 - 新定位来源或可控测试源：实现 `RideTrackingProviding` 并注入 `RideSessionController`（`iOS/bike/bike/Services/RideTrackingService.swift`、`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
 - 调整轨迹质量和运动判定：修改命名配置及对应单测，而不是散落到页面（`iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift`、`iOS/bike/bikeTests/bikeTests.swift`）。
+- 调整海拔精度、平滑或趋势判定：修改 `ElevationCalculationConfiguration` 和对应单测；不得在 View、控制器或仓储中复制阈值（`iOS/bike/bike/Domain/ElevationAccumulator.swift`、`iOS/bike/bikeTests/bikeTests.swift`）。
 - 新增顶级功能：在 `AppTab`、`ContentView` 和必要的 AppModel 依赖中显式接入（`iOS/bike/bike/AppModel.swift`、`iOS/bike/bike/ContentView.swift`）。
 - 新遥测提供方：当前入口集中在 AppDelegate，但尚无仓库内协议边界；若业务需要测试或开关，应先抽象其生命周期与隐私策略（`iOS/bike/bike/bikeApp.swift`）。
 

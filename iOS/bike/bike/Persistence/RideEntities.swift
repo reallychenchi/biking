@@ -13,6 +13,10 @@ final class RideEntity {
     var maximumSpeedMetersPerSecond: Double
     var overallSpeedMetersPerSecond: Double
     var averageSpeedMetersPerSecond: Double
+    var cumulativeAscentMeters: Double?
+    var cumulativeDescentMeters: Double?
+    var minimumAltitudeMeters: Double?
+    var maximumAltitudeMeters: Double?
     var createdAt: Date
     var updatedAt: Date
     @Relationship(deleteRule: .cascade) var points: [TrackPointEntity]
@@ -28,6 +32,10 @@ final class RideEntity {
         maximumSpeedMetersPerSecond = 0
         overallSpeedMetersPerSecond = 0
         averageSpeedMetersPerSecond = 0
+        cumulativeAscentMeters = nil
+        cumulativeDescentMeters = nil
+        minimumAltitudeMeters = nil
+        maximumAltitudeMeters = nil
         self.createdAt = createdAt
         updatedAt = createdAt
         points = []
@@ -43,6 +51,8 @@ final class TrackPointEntity {
     var timestamp: Date
     var horizontalAccuracy: Double
     var systemSpeedMetersPerSecond: Double?
+    var altitudeMeters: Double?
+    var verticalAccuracyMeters: Double?
     var segmentIndex: Int
 
     init(point: TrackPoint) {
@@ -53,6 +63,8 @@ final class TrackPointEntity {
         timestamp = point.timestamp
         horizontalAccuracy = point.horizontalAccuracy
         systemSpeedMetersPerSecond = point.systemSpeedMetersPerSecond
+        altitudeMeters = point.altitudeMeters
+        verticalAccuracyMeters = point.verticalAccuracyMeters
         segmentIndex = point.segmentIndex
     }
 
@@ -65,6 +77,8 @@ final class TrackPointEntity {
             timestamp: timestamp,
             horizontalAccuracy: horizontalAccuracy,
             systemSpeedMetersPerSecond: systemSpeedMetersPerSecond,
+            altitudeMeters: altitudeMeters,
+            verticalAccuracyMeters: verticalAccuracyMeters,
             segmentIndex: segmentIndex
         )
     }

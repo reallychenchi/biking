@@ -17,6 +17,19 @@ enum RideFormatting {
         String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), metersPerSecond * 3.6)
     }
 
+    static func elevation(_ meters: Double?) -> String {
+        guard let value = elevationValue(meters) else { return "—" }
+        return "\(value) m"
+    }
+
+    static func elevationRange(minimumMeters: Double?, maximumMeters: Double?) -> String {
+        guard let minimum = elevationValue(minimumMeters),
+              let maximum = elevationValue(maximumMeters) else {
+            return "—"
+        }
+        return "\(minimum)–\(maximum) m"
+    }
+
     static func liveDuration(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded(.down)))
         if total >= 3_600 {
@@ -48,5 +61,13 @@ enum RideFormatting {
         formatter.timeZone = .autoupdatingCurrent
         formatter.dateFormat = format
         return formatter
+    }
+
+    private static func elevationValue(_ meters: Double?) -> String? {
+        guard let meters, meters.isFinite else { return nil }
+        let rounded = meters.rounded()
+        let normalized = rounded == 0 ? 0 : rounded
+        return String(format: "%.0f", locale: Locale(identifier: "en_US_POSIX"), normalized)
+            .replacingOccurrences(of: "-", with: "−")
     }
 }

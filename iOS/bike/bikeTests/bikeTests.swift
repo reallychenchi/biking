@@ -55,12 +55,16 @@ struct bikeTests {
     func validatorFiltersSpeedAndExpiresCurrentSpeed() {
         let now = Date(timeIntervalSince1970: 3_000)
         var validator = LocationSampleValidator()
-        let result = validator.validate(sample(at: now, speed: 33.34))
+        let result = validator.validate(
+            sample(at: now, speed: 33.34, altitude: 123, verticalAccuracy: 4)
+        )
         guard case let .accepted(accepted) = result else {
             Issue.record("位置点本身应有效")
             return
         }
         #expect(accepted.point.systemSpeedMetersPerSecond == nil)
+        #expect(accepted.point.altitudeMeters == 123)
+        #expect(accepted.point.verticalAccuracyMeters == 4)
         #expect(LocationSampleValidator.freshSpeed(metersPerSecond: 3, sampleDate: now, now: now.addingTimeInterval(5)) == 3)
         #expect(LocationSampleValidator.freshSpeed(metersPerSecond: 3, sampleDate: now, now: now.addingTimeInterval(5.01)) == 0)
     }
@@ -75,6 +79,97 @@ struct bikeTests {
         #expect(RideFormatting.liveDuration(3_599) == "59:59")
         #expect(RideFormatting.liveDuration(3_600) == "01:00:00")
         #expect(RideFormatting.fullDuration(65) == "00:01:05")
+        #expect(RideFormatting.elevation(123.4) == "123 m")
+        #expect(RideFormatting.elevation(nil) == "—")
+        #expect(RideFormatting.elevationRange(minimumMeters: -12.4, maximumMeters: 85.4) == "−12–85 m")
+    }
+
+    @Test
+    func elevationAccumulatorCountsGradualAscentAndDescent() {
+        let ascent = elevationMetrics([100, 101, 102, 103, 104])
+        #expect(ascent.cumulativeAscentMeters == 4)
+        #expect(ascent.cumulativeDescentMeters == 0)
+        #expect(ascent.minimumAltitudeMeters == 100)
+        #expect(ascent.maximumAltitudeMeters == 104)
+
+        let descent = elevationMetrics([104, 103, 102, 101, 100])
+        #expect(descent.cumulativeAscentMeters == 0)
+        #expect(descent.cumulativeDescentMeters == 4)
+    }
+
+    @Test
+    func elevationAccumulatorSuppressesFlatNoiseAndIsolatedSpike() {
+        let flat = elevationMetrics([100, 101.5, 99.5, 100.8, 100])
+        #expect(flat.cumulativeAscentMeters == 0)
+        #expect(flat.cumulativeDescentMeters == 0)
+        #expect(flat.minimumAltitudeMeters == 100)
+        #expect(flat.maximumAltitudeMeters == 100.8)
+
+        let spike = elevationMetrics([100, 130, 100])
+        #expect(spike.cumulativeAscentMeters == 0)
+        #expect(spike.cumulativeDescentMeters == 0)
+        #expect(spike.minimumAltitudeMeters == 100)
+        #expect(spike.maximumAltitudeMeters == 100)
+    }
+
+    @Test
+    func elevationAccumulatorCommitsReversalsAndFinalTrendOnce() {
+        var accumulator = ElevationAccumulator()
+        let altitudes = [100.0, 101, 103, 105, 105, 103, 100]
+        for (sequence, altitude) in altitudes.enumerated() {
+            accumulator.consume(elevationPoint(sequence: sequence, altitude: altitude))
+        }
+
+        let first = accumulator.metrics()
+        let second = accumulator.metrics()
+        #expect(first.cumulativeAscentMeters == 5)
+        #expect(first.cumulativeDescentMeters == 5)
+        #expect(first == second)
+    }
+
+    @Test
+    func elevationAccumulatorDoesNotCrossSegmentsOrLongGaps() {
+        var segmented = ElevationAccumulator()
+        segmented.consume(elevationPoint(sequence: 0, altitude: 100, segmentIndex: 0))
+        segmented.consume(elevationPoint(sequence: 1, altitude: 105, segmentIndex: 0))
+        segmented.consume(elevationPoint(sequence: 2, altitude: 80, segmentIndex: 1))
+        segmented.consume(elevationPoint(sequence: 3, altitude: 90, segmentIndex: 1))
+        #expect(segmented.metrics().cumulativeAscentMeters == 15)
+        #expect(segmented.metrics().cumulativeDescentMeters == 0)
+
+        var gap = ElevationAccumulator()
+        let start = Date(timeIntervalSince1970: 10_000)
+        gap.consume(elevationPoint(sequence: 0, altitude: 100, date: start))
+        gap.consume(elevationPoint(sequence: 1, altitude: 105, date: start.addingTimeInterval(1)))
+        gap.consume(elevationPoint(sequence: 2, altitude: 50, date: start.addingTimeInterval(32)))
+        gap.consume(elevationPoint(sequence: 3, altitude: 60, date: start.addingTimeInterval(33)))
+        #expect(gap.metrics().cumulativeAscentMeters == 15)
+        #expect(gap.metrics().cumulativeDescentMeters == 0)
+    }
+
+    @Test
+    func elevationAccumulatorDistinguishesUnavailableFromZero() {
+        var unavailable = ElevationAccumulator()
+        unavailable.consume(elevationPoint(sequence: 0, altitude: 100, verticalAccuracy: 20.1))
+        #expect(unavailable.metrics() == ElevationMetrics(
+            cumulativeAscentMeters: nil,
+            cumulativeDescentMeters: nil,
+            minimumAltitudeMeters: nil,
+            maximumAltitudeMeters: nil
+        ))
+
+        var onePoint = ElevationAccumulator()
+        onePoint.consume(elevationPoint(sequence: 0, altitude: -10))
+        #expect(onePoint.metrics().cumulativeAscentMeters == nil)
+        #expect(onePoint.metrics().minimumAltitudeMeters == -10)
+        #expect(onePoint.metrics().maximumAltitudeMeters == -10)
+
+        let belowThreshold = elevationMetrics([100, 102])
+        #expect(belowThreshold.cumulativeAscentMeters == 0)
+        #expect(belowThreshold.cumulativeDescentMeters == 0)
+
+        let exactThreshold = elevationMetrics([100, 103])
+        #expect(exactThreshold.cumulativeAscentMeters == 3)
     }
 
     @Test
@@ -155,6 +250,8 @@ struct bikeTests {
             timestamp: start,
             horizontalAccuracy: 5,
             systemSpeedMetersPerSecond: 4,
+            altitudeMeters: 100,
+            verticalAccuracyMeters: 5,
             segmentIndex: 0
         )
         let progress = RideProgress(
@@ -164,19 +261,22 @@ struct bikeTests {
             maximumSpeedMetersPerSecond: 6,
             overallSpeedMetersPerSecond: 5,
             averageSpeedMetersPerSecond: 6.25,
+            cumulativeAscentMeters: 12,
+            cumulativeDescentMeters: 8,
+            minimumAltitudeMeters: 100,
+            maximumAltitudeMeters: 112,
             updatedAt: start.addingTimeInterval(100)
         )
 
         try await repository.createTemporaryRide(id: rideID, startDate: start, createdAt: start)
         #expect(try await repository.unfinishedRideIDs() == [rideID])
-        try await repository.completeRide(
-            RideCompletionSnapshot(
-                rideID: rideID,
-                endDate: start.addingTimeInterval(100),
-                progress: progress
-            ),
-            pendingPoints: [point]
+        let completion = RideCompletionSnapshot(
+            rideID: rideID,
+            endDate: start.addingTimeInterval(100),
+            progress: progress
         )
+        try await repository.completeRide(completion, pendingPoints: [point])
+        try await repository.completeRide(completion, pendingPoints: [point])
 
         let records = try await repository.completedRides()
         #expect(records.count == 1)
@@ -186,6 +286,10 @@ struct bikeTests {
         #expect(records.first?.movingElapsedSeconds == 80)
         #expect(records.first?.overallSpeedMetersPerSecond == 5)
         #expect(records.first?.averageSpeedMetersPerSecond == 6.25)
+        #expect(records.first?.cumulativeAscentMeters == 12)
+        #expect(records.first?.cumulativeDescentMeters == 8)
+        #expect(records.first?.minimumAltitudeMeters == 100)
+        #expect(records.first?.maximumAltitudeMeters == 112)
         #expect(records.first?.points == [point])
         #expect(try await repository.unfinishedRideIDs().isEmpty)
     }
@@ -241,14 +345,18 @@ struct bikeTests {
         at date: Date,
         longitude: Double = 116.4,
         accuracy: Double = 5,
-        speed: Double = 2
+        speed: Double = 2,
+        altitude: Double? = nil,
+        verticalAccuracy: Double? = nil
     ) -> RawLocationSample {
         RawLocationSample(
             latitude: 39.9,
             longitude: longitude,
             timestamp: date,
             horizontalAccuracy: accuracy,
-            systemSpeedMetersPerSecond: speed
+            systemSpeedMetersPerSecond: speed,
+            altitudeMeters: altitude,
+            verticalAccuracyMeters: verticalAccuracy
         )
     }
 
@@ -266,6 +374,35 @@ struct bikeTests {
             timestamp: date,
             horizontalAccuracy: 5,
             systemSpeedMetersPerSecond: 2,
+            segmentIndex: segmentIndex
+        )
+    }
+
+    private func elevationMetrics(_ altitudes: [Double]) -> ElevationMetrics {
+        var accumulator = ElevationAccumulator()
+        for (sequence, altitude) in altitudes.enumerated() {
+            accumulator.consume(elevationPoint(sequence: sequence, altitude: altitude))
+        }
+        return accumulator.metrics()
+    }
+
+    private func elevationPoint(
+        sequence: Int,
+        altitude: Double,
+        verticalAccuracy: Double = 5,
+        segmentIndex: Int = 0,
+        date: Date? = nil
+    ) -> TrackPoint {
+        TrackPoint(
+            id: UUID(),
+            sequence: sequence,
+            latitude: 39.9,
+            longitude: 116.4,
+            timestamp: date ?? Date(timeIntervalSince1970: 10_000 + Double(sequence)),
+            horizontalAccuracy: 5,
+            systemSpeedMetersPerSecond: 2,
+            altitudeMeters: altitude,
+            verticalAccuracyMeters: verticalAccuracy,
             segmentIndex: segmentIndex
         )
     }

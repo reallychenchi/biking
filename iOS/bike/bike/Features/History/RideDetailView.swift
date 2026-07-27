@@ -32,6 +32,15 @@ private struct RideDetailInfoView: View {
                 detail("全程时间", RideFormatting.fullDuration(ride.totalElapsedSeconds))
                 detail("运动时间", RideFormatting.fullDuration(ride.movingElapsedSeconds))
                 detail("总距离", RideFormatting.distance(ride.distanceMeters))
+                detail("累积上升", RideFormatting.elevation(ride.cumulativeAscentMeters))
+                detail("累积下降", RideFormatting.elevation(ride.cumulativeDescentMeters))
+                detail(
+                    "海拔范围",
+                    RideFormatting.elevationRange(
+                        minimumMeters: ride.minimumAltitudeMeters,
+                        maximumMeters: ride.maximumAltitudeMeters
+                    )
+                )
             }
             .padding(16)
         }
