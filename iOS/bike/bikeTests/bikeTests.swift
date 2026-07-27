@@ -296,6 +296,24 @@ struct bikeTests {
     }
 
     @Test
+    func externalSpeedZoneLabelsKeepOrderAndMinimumSpacing() {
+        let spacing: CGFloat = 28
+        let height: CGFloat = 160
+        let positions = NonOverlappingVerticalLabelLayout.positions(
+            naturalYPositions: [75, 76, 77, 78, 79],
+            height: height,
+            spacing: spacing
+        )
+
+        #expect(positions.count == 5)
+        #expect((positions.first ?? 0) >= spacing / 2)
+        #expect((positions.last ?? height) <= height - spacing / 2)
+        for pair in zip(positions, positions.dropFirst()) {
+            #expect(pair.1 - pair.0 >= spacing)
+        }
+    }
+
+    @Test
     func routeSnapshotDiskCachePersistsData() async throws {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

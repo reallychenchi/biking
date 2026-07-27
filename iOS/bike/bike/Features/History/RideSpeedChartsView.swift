@@ -5,6 +5,8 @@ struct RideSpeedChartsView: View {
     private enum Layout {
         static let chartHeight: CGFloat = 240
         static let sectionSpacing: CGFloat = 28
+        static let smallZoneThreshold = 0.10
+        static let externalLabelSpacing: CGFloat = 28
     }
 
     private static let zoneColors = [
@@ -85,24 +87,9 @@ struct RideSpeedChartsView: View {
         ) {
             if analysis.classifiedDistanceMeters > 0 {
                 ZStack {
-                    Chart(visibleZoneShares) { share in
-                        SectorMark(
-                            angle: .value("骑行距离", share.distanceMeters),
-                            innerRadius: .ratio(0.6),
-                            angularInset: 1.5
-                        )
-                        .foregroundStyle(color(for: share.zone.id))
-                        .cornerRadius(3)
-                        .annotation(position: .overlay) {
-                            Text(compactZoneTitle(share.zone.title))
-                                .font(.caption2.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .minimumScaleFactor(0.65)
-                                .shadow(color: .black.opacity(0.45), radius: 1)
-                        }
+                    Canvas { context, size in
+                        drawSpeedZoneDonut(context: &context, size: size)
                     }
-                    .chartLegend(.hidden)
                     .frame(height: Layout.chartHeight)
                     .accessibilityLabel("速度区间距离占比圆环图")
                     .accessibilityValue(zoneChartAccessibilityValue)
@@ -160,8 +147,177 @@ struct RideSpeedChartsView: View {
         }.joined(separator: "，")
     }
 
-    private func compactZoneTitle(_ title: String) -> String {
-        title.replacingOccurrences(of: " km/h", with: "\nkm/h")
+    private func drawSpeedZoneDonut(context: inout GraphicsContext, size: CGSize) {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let outerRadius = min(size.height * 0.31, size.width * 0.27)
+        let innerRadius = outerRadius * 0.60
+        let sectors = makeSectorLayouts()
+
+        for sector in sectors {
+            let angularGap = min(Double.pi / 180, sector.span * 0.15)
+            var path = Path()
+            path.addArc(
+                center: center,
+                radius: outerRadius,
+                startAngle: .radians(sector.startAngle + angularGap),
+                endAngle: .radians(sector.endAngle - angularGap),
+                clockwise: false
+            )
+            path.addArc(
+                center: center,
+                radius: innerRadius,
+                startAngle: .radians(sector.endAngle - angularGap),
+                endAngle: .radians(sector.startAngle + angularGap),
+                clockwise: true
+            )
+            path.closeSubpath()
+            context.fill(path, with: .color(color(for: sector.share.zone.id)))
+        }
+
+        drawInternalZoneLabels(
+            sectors.filter { $0.share.proportion >= Layout.smallZoneThreshold },
+            context: &context,
+            center: center,
+            radius: (outerRadius + innerRadius) / 2
+        )
+        drawExternalZoneLabels(
+            sectors.filter { $0.share.proportion < Layout.smallZoneThreshold },
+            context: &context,
+            size: size,
+            center: center,
+            outerRadius: outerRadius
+        )
+    }
+
+    private func makeSectorLayouts() -> [SpeedZoneSectorLayout] {
+        var startAngle = -Double.pi / 2
+        return visibleZoneShares.map { share in
+            let span = share.proportion * 2 * Double.pi
+            let layout = SpeedZoneSectorLayout(
+                share: share,
+                startAngle: startAngle,
+                endAngle: startAngle + span
+            )
+            startAngle += span
+            return layout
+        }
+    }
+
+    private func drawInternalZoneLabels(
+        _ sectors: [SpeedZoneSectorLayout],
+        context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat
+    ) {
+        for sector in sectors {
+            let position = point(center: center, radius: radius, angle: sector.midAngle)
+            let text = Text(zoneLabel(for: sector.share))
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(.black)
+            context.draw(text, at: position, anchor: .center)
+        }
+    }
+
+    private func drawExternalZoneLabels(
+        _ sectors: [SpeedZoneSectorLayout],
+        context: inout GraphicsContext,
+        size: CGSize,
+        center: CGPoint,
+        outerRadius: CGFloat
+    ) {
+        let naturalLayouts = sectors.map { sector in
+            let target = point(center: center, radius: outerRadius + 12, angle: sector.midAngle)
+            return SpeedZoneExternalLabelLayout(
+                sector: sector,
+                isRightSide: cos(sector.midAngle) >= 0,
+                naturalY: target.y,
+                labelY: target.y
+            )
+        }
+        let leftLayouts = distributedExternalLabels(
+            naturalLayouts.filter { !$0.isRightSide },
+            height: size.height
+        )
+        let rightLayouts = distributedExternalLabels(
+            naturalLayouts.filter(\.isRightSide),
+            height: size.height
+        )
+
+        for layout in leftLayouts + rightLayouts {
+            let direction: CGFloat = layout.isRightSide ? 1 : -1
+            let anchorPoint = point(
+                center: center,
+                radius: outerRadius,
+                angle: layout.sector.midAngle
+            )
+            let radialPoint = point(
+                center: center,
+                radius: outerRadius + 10,
+                angle: layout.sector.midAngle
+            )
+            let text = Text(zoneLabel(for: layout.sector.share))
+                .font(.system(size: 8, weight: .semibold))
+                .foregroundStyle(.black)
+            let resolvedText = context.resolve(text)
+            let textSize = resolvedText.measure(
+                in: CGSize(width: size.width, height: Layout.externalLabelSpacing)
+            )
+            let horizontalMargin: CGFloat = 2
+            let halfTextWidth = textSize.width / 2
+            let labelCenterX: CGFloat
+            if layout.isRightSide {
+                labelCenterX = size.width - horizontalMargin - halfTextWidth
+            } else {
+                labelCenterX = horizontalMargin + halfTextWidth
+            }
+            let lineEnd = CGPoint(
+                x: labelCenterX - direction * (halfTextWidth + 4),
+                y: layout.labelY
+            )
+            var leaderPath = Path()
+            leaderPath.move(to: anchorPoint)
+            leaderPath.addLine(to: radialPoint)
+            leaderPath.addLine(to: lineEnd)
+            context.stroke(
+                leaderPath,
+                with: .color(Color(uiColor: .systemGray)),
+                lineWidth: 1.5
+            )
+
+            context.draw(
+                resolvedText,
+                at: CGPoint(x: labelCenterX, y: layout.labelY),
+                anchor: .center
+            )
+        }
+    }
+
+    private func distributedExternalLabels(
+        _ layouts: [SpeedZoneExternalLabelLayout],
+        height: CGFloat
+    ) -> [SpeedZoneExternalLabelLayout] {
+        guard !layouts.isEmpty else { return [] }
+        var result = layouts.sorted { $0.naturalY < $1.naturalY }
+        let positions = NonOverlappingVerticalLabelLayout.positions(
+            naturalYPositions: result.map(\.naturalY),
+            height: height,
+            spacing: Layout.externalLabelSpacing
+        )
+        for index in result.indices {
+            result[index].labelY = positions[index]
+        }
+        return result
+    }
+
+    private func point(center: CGPoint, radius: CGFloat, angle: Double) -> CGPoint {
+        CGPoint(
+            x: center.x + radius * CGFloat(cos(angle)),
+            y: center.y + radius * CGFloat(sin(angle))
+        )
+    }
+
+    private func zoneLabel(for share: RideSpeedZoneShare) -> String {
+        share.zone.title
     }
 
     private func color(for zoneID: Int) -> Color {
@@ -178,6 +334,53 @@ struct RideSpeedChartsView: View {
             .foregroundStyle(AppTheme.secondaryText)
             .frame(maxWidth: .infinity, minHeight: 120)
             .multilineTextAlignment(.center)
+    }
+}
+
+private struct SpeedZoneSectorLayout {
+    let share: RideSpeedZoneShare
+    let startAngle: Double
+    let endAngle: Double
+
+    var span: Double { endAngle - startAngle }
+    var midAngle: Double { startAngle + span / 2 }
+}
+
+private struct SpeedZoneExternalLabelLayout {
+    let sector: SpeedZoneSectorLayout
+    let isRightSide: Bool
+    let naturalY: CGFloat
+    var labelY: CGFloat
+}
+
+struct NonOverlappingVerticalLabelLayout {
+    static func positions(
+        naturalYPositions: [CGFloat],
+        height: CGFloat,
+        spacing: CGFloat
+    ) -> [CGFloat] {
+        guard !naturalYPositions.isEmpty else { return [] }
+        let minimumY = spacing / 2
+        let maximumY = height - spacing / 2
+        var positions = naturalYPositions
+
+        positions[0] = max(minimumY, positions[0])
+        for index in positions.indices.dropFirst() {
+            positions[index] = max(positions[index], positions[index - 1] + spacing)
+        }
+
+        if let lastIndex = positions.indices.last, positions[lastIndex] > maximumY {
+            positions[lastIndex] = maximumY
+            for index in positions.indices.dropLast().reversed() {
+                positions[index] = min(positions[index], positions[index + 1] - spacing)
+            }
+        }
+
+        if positions[0] < minimumY {
+            let offset = minimumY - positions[0]
+            positions = positions.map { $0 + offset }
+        }
+        return positions
     }
 }
 
