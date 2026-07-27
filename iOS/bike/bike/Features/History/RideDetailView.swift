@@ -80,13 +80,8 @@ private struct RideDetailInfoView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: Layout.sectionSpacing) {
-                LazyVGrid(columns: columns, spacing: Layout.cardSpacing) {
-                    ForEach(metrics) { metric in
-                        RideMetricCard(metric: metric)
-                    }
-                }
-
                 VStack(spacing: Layout.timeRowSpacing) {
+                    plainDetail("起止时间", rideTimeRange)
                     plainDetail(
                         "海拔范围",
                         RideFormatting.elevationRange(
@@ -94,8 +89,12 @@ private struct RideDetailInfoView: View {
                             maximumMeters: ride.maximumAltitudeMeters
                         )
                     )
-                    plainDetail("开始时间", RideFormatting.dateTime(ride.startDate))
-                    plainDetail("结束时间", ride.endDate.map { RideFormatting.dateTime($0) } ?? "—")
+                }
+
+                LazyVGrid(columns: columns, spacing: Layout.cardSpacing) {
+                    ForEach(metrics) { metric in
+                        RideMetricCard(metric: metric)
+                    }
                 }
             }
             .padding(.horizontal, Layout.pagePadding)
@@ -110,6 +109,12 @@ private struct RideDetailInfoView: View {
             GridItem(.flexible(), spacing: Layout.cardSpacing),
             GridItem(.flexible())
         ]
+    }
+
+    private var rideTimeRange: String {
+        let startTime = RideFormatting.time(ride.startDate)
+        let endTime = ride.endDate.map(RideFormatting.time) ?? "—"
+        return "\(startTime) - \(endTime)"
     }
 
     private var metrics: [RideDetailMetric] {
