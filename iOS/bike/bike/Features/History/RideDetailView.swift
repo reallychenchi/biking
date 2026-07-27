@@ -1,19 +1,63 @@
 import SwiftUI
 
 struct RideDetailView: View {
+    private enum DetailTab {
+        case details
+        case route
+    }
+
     let ride: RideRecord
+    @State private var selectedTab = DetailTab.details
 
     var body: some View {
-        TabView {
-            RideDetailInfoView(ride: ride)
-                .tabItem { Label("详情", systemImage: "list.bullet") }
-            RideRouteView(ride: ride)
-                .tabItem { Label("轨迹", systemImage: "map") }
+        Group {
+            switch selectedTab {
+            case .details:
+                RideDetailInfoView(ride: ride)
+            case .route:
+                RideRouteView(ride: ride)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            detailTabBar
         }
         .navigationTitle(RideFormatting.date(ride.startDate))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+    }
+
+    private var detailTabBar: some View {
+        HStack(spacing: 0) {
+            detailTabButton("详情", systemImage: "list.bullet", tab: .details)
+            detailTabButton("轨迹", systemImage: "map", tab: .route)
+        }
+        .padding(.top, 8)
+        .background(.ultraThinMaterial, ignoresSafeAreaEdges: .bottom)
+    }
+
+    private func detailTabButton(
+        _ title: String,
+        systemImage: String,
+        tab: DetailTab
+    ) -> some View {
+        Button {
+            selectedTab = tab
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18))
+                Text(title)
+                    .font(.caption)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(minHeight: AppTheme.minimumTapSize)
+            .foregroundStyle(selectedTab == tab ? AppTheme.accentForeground : AppTheme.secondaryText)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 }
 

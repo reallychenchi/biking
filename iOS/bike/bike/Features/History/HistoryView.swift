@@ -39,7 +39,8 @@ struct HistoryView: View {
             .background(AppTheme.pageBackground.ignoresSafeArea())
             .navigationTitle("历史")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(AppTheme.pageBackground, for: .navigationBar)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .overlay(alignment: .top) {
                 if let error = library.errorMessage {
                     Text(error)

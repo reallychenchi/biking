@@ -34,7 +34,7 @@ struct ContentView: View {
                 .tag(AppTab.settings)
         }
         .tint(AppTheme.accentForeground)
-        .toolbarBackground(AppTheme.pageBackground, for: .tabBar)
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
         .toolbarBackground(.visible, for: .tabBar)
         .preferredColorScheme(appearancePreference.preferredColorScheme)
         .task { await appModel.start() }
