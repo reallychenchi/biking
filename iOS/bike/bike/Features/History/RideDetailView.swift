@@ -157,9 +157,14 @@ private struct RideDetailContent: View {
                 )
             }
 
-            LazyVGrid(columns: columns, spacing: RideDetailLayout.cardSpacing) {
-                ForEach(metrics) { metric in
-                    RideMetricCard(metric: metric)
+            VStack(spacing: RideDetailLayout.cardSpacing) {
+                ForEach(metricRows.indices, id: \.self) { rowIndex in
+                    HStack(spacing: RideDetailLayout.cardSpacing) {
+                        ForEach(metricRows[rowIndex]) { metric in
+                            RideMetricCard(metric: metric)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    }
                 }
             }
 
@@ -172,11 +177,10 @@ private struct RideDetailContent: View {
         .padding(.vertical, RideDetailLayout.sectionSpacing)
     }
 
-    private var columns: [GridItem] {
-        [
-            GridItem(.flexible(), spacing: RideDetailLayout.cardSpacing),
-            GridItem(.flexible())
-        ]
+    private var metricRows: [[RideDetailMetric]] {
+        stride(from: 0, to: metrics.count, by: 2).map { startIndex in
+            Array(metrics[startIndex..<min(startIndex + 2, metrics.count)])
+        }
     }
 
     private var rideTimeRange: String {
