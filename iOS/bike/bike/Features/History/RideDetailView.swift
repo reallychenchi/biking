@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import OSLog
 
 struct RideDetailView: View {
     private enum DetailTab {
@@ -8,6 +10,11 @@ struct RideDetailView: View {
 
     let ride: RideRecord
     @State private var selectedTab = DetailTab.details
+    @State private var sharePayload: RideSharePayload?
+    @State private var shareError: ShareImageError?
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         Group {
@@ -26,6 +33,24 @@ struct RideDetailView: View {
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(action: shareDetail) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel("分享骑行详情")
+            }
+        }
+        .sheet(item: $sharePayload) { payload in
+            RideImageShareSheet(image: payload.image)
+        }
+        .alert(item: $shareError) { error in
+            Alert(
+                title: Text("无法生成分享图片"),
+                message: Text(error.localizedDescription),
+                dismissButton: .default(Text("知道了"))
+            )
+        }
     }
 
     private var detailTabBar: some View {
@@ -59,16 +84,57 @@ struct RideDetailView: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
+
+    private func shareDetail() {
+        let renderer = ImageRenderer(
+            content: RideDetailShareContent(ride: ride)
+                .environment(\.colorScheme, colorScheme)
+        )
+        renderer.proposedSize = ProposedViewSize(width: UIScreen.main.bounds.width, height: nil)
+        renderer.scale = displayScale
+
+        guard let image = renderer.uiImage else {
+            AppLog.history.error("Failed to render ride detail share image for ride \(ride.id, privacy: .public)")
+            shareError = .renderingFailed
+            return
+        }
+
+        sharePayload = RideSharePayload(image: image)
+        AppLog.history.info("Rendered ride detail share image for ride \(ride.id, privacy: .public)")
+    }
 }
 
 private struct RideDetailInfoView: View {
-    private enum Layout {
-        static let pagePadding: CGFloat = 24
-        static let sectionSpacing: CGFloat = 28
-        static let timeRowSpacing: CGFloat = 14
-        static let cardSpacing: CGFloat = 18
-    }
+    let ride: RideRecord
 
+    var body: some View {
+        ScrollView {
+            RideDetailContent(ride: ride)
+        }
+        .background(AppTheme.pageBackground.ignoresSafeArea())
+        .foregroundStyle(AppTheme.primaryText)
+    }
+}
+
+private struct RideDetailShareContent: View {
+    let ride: RideRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(RideFormatting.date(ride.startDate))
+                .font(.title2.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, RideDetailLayout.pagePadding)
+                .padding(.top, RideDetailLayout.sectionSpacing)
+
+            RideDetailContent(ride: ride)
+        }
+        .background(AppTheme.pageBackground)
+        .foregroundStyle(AppTheme.primaryText)
+    }
+}
+
+private struct RideDetailContent: View {
     private enum Unit {
         static let speed = "km/h"
         static let distance = "km"
@@ -79,40 +145,36 @@ private struct RideDetailInfoView: View {
     let ride: RideRecord
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: Layout.sectionSpacing) {
-                VStack(spacing: Layout.timeRowSpacing) {
-                    plainDetail("起止时间", rideTimeRange)
-                    plainDetail(
-                        "海拔范围",
-                        RideFormatting.elevationRange(
-                            minimumMeters: ride.minimumAltitudeMeters,
-                            maximumMeters: ride.maximumAltitudeMeters
-                        )
+        VStack(spacing: RideDetailLayout.sectionSpacing) {
+            VStack(spacing: RideDetailLayout.timeRowSpacing) {
+                plainDetail("起止时间", rideTimeRange)
+                plainDetail(
+                    "海拔范围",
+                    RideFormatting.elevationRange(
+                        minimumMeters: ride.minimumAltitudeMeters,
+                        maximumMeters: ride.maximumAltitudeMeters
                     )
-                }
-
-                LazyVGrid(columns: columns, spacing: Layout.cardSpacing) {
-                    ForEach(metrics) { metric in
-                        RideMetricCard(metric: metric)
-                    }
-                }
-
-                RideSpeedChartsView(
-                    points: ride.points,
-                    endDistanceMeters: ride.distanceMeters
                 )
             }
-            .padding(.horizontal, Layout.pagePadding)
-            .padding(.vertical, Layout.sectionSpacing)
+
+            LazyVGrid(columns: columns, spacing: RideDetailLayout.cardSpacing) {
+                ForEach(metrics) { metric in
+                    RideMetricCard(metric: metric)
+                }
+            }
+
+            RideSpeedChartsView(
+                points: ride.points,
+                endDistanceMeters: ride.distanceMeters
+            )
         }
-        .background(AppTheme.pageBackground.ignoresSafeArea())
-        .foregroundStyle(AppTheme.primaryText)
+        .padding(.horizontal, RideDetailLayout.pagePadding)
+        .padding(.vertical, RideDetailLayout.sectionSpacing)
     }
 
     private var columns: [GridItem] {
         [
-            GridItem(.flexible(), spacing: Layout.cardSpacing),
+            GridItem(.flexible(), spacing: RideDetailLayout.cardSpacing),
             GridItem(.flexible())
         ]
     }
@@ -176,6 +238,38 @@ private struct RideDetailInfoView: View {
         }
         return RideDetailMetric(title: title, value: value, unit: Unit.elevation)
     }
+}
+
+private enum RideDetailLayout {
+    static let pagePadding: CGFloat = 24
+    static let sectionSpacing: CGFloat = 28
+    static let timeRowSpacing: CGFloat = 14
+    static let cardSpacing: CGFloat = 18
+}
+
+private enum ShareImageError: LocalizedError, Identifiable {
+    case renderingFailed
+
+    var id: String { "renderingFailed" }
+
+    var errorDescription: String? {
+        "请稍后重试。"
+    }
+}
+
+private struct RideSharePayload: Identifiable {
+    let id = UUID()
+    let image: UIImage
+}
+
+private struct RideImageShareSheet: UIViewControllerRepresentable {
+    let image: UIImage
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: [image], applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 private struct RideDetailMetric: Identifiable {

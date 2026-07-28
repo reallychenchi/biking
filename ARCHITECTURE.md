@@ -16,7 +16,7 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 | 全局应用状态 | 持有 Tab 状态、骑行控制器、历史库、网络监视器；启动时加载历史并检查未完成骑行 | `iOS/bike/bike/AppModel.swift` |
 | 根界面与生命周期桥接 | 组装骑行、历史、设置三个 Tab；把前后台事件转交骑行控制器 | `iOS/bike/bike/ContentView.swift` |
 | 骑行功能 | 管理骑行状态机、运行任务、实时地图和指标、开始/结束/重试交互 | `iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Features/Ride/RideView.swift` |
-| 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情、速度分析图表和分段轨迹 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
+| 历史功能 | 加载、延迟删除及撤销记录；展示列表、带内存及磁盘缓存的异步轨迹缩略图、详情、速度分析图表和分段轨迹；将详情指标渲染为长图并调用系统分享面板 | `iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift` |
 | 设置功能 | 在当前页面切换并持久化主题偏好；展示关于页和本地数据/定位用途说明 | `iOS/bike/bike/Features/Settings/SettingsView.swift` |
 | 核心领域 | 定义骑行、轨迹点、进度、完成快照、指标公式和基于轨迹点的速度距离分析 | `iOS/bike/bike/Domain/RideModels.swift`、`iOS/bike/bike/Domain/RideSpeedAnalysis.swift` |
 | 定位校验与指标累计 | 校验位置/速度/轨迹段，累计带迟滞与超时规则的运动时间；过滤、平滑并累计海拔趋势 | `iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MovementTimeAccumulator.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift` |
@@ -36,7 +36,7 @@ Bike 是一个本地优先的 iPhone 骑行记录应用：采集定位，计算�
 
 `AppModel.init(repository:)` 是第二级组装点：同一 `RideRepository` 被注入 `RideLibrary` 和 `RideSessionController`，但具体的 `RideTrackingService` 与 `NetworkStatusMonitor` 仍由 `AppModel` 内部创建（`iOS/bike/bike/AppModel.swift`）。因此仓储可替换，定位服务可在 `RideSessionController` 单测中替换，而全局组合根尚未统一管理所有依赖。
 
-友盟初始化走 `@UIApplicationDelegateAdaptor` 指向的 `AppDelegate`，与骑行业务依赖图并列（`iOS/bike/bike/bikeApp.swift`）。
+友盟初始化走 `@UIApplicationDelegateAdaptor` 指向的 `AppDelegate`，与骑行业务依赖图并列。UMAPM 2.0.7 的页面监控仍会查询旧式 `UIApplicationDelegate.window`；兼容属性只把该查询映射到当前前台 `UIWindowScene.keyWindow`，窗口本身继续由 SwiftUI `WindowGroup` 管理，不创建第二个 `UIWindow`（`iOS/bike/bike/bikeApp.swift`）。
 
 ## 依赖方向
 
@@ -90,7 +90,8 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 2. 列表项依次查询内存缓存和 App `Caches/RideRouteSnapshots` 磁盘缓存；均未命中时才异步使用 MapKit 生成等宽高地图快照并叠加分段轨迹和起终点。生成期间显示进度占位，成功后写入两级缓存并自动刷新（`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift`）。
 3. 详情页与缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；详情页以 MapKit polyline 展示并标记起终点（`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
 4. 详情页使用同一组持久化轨迹点派生累计距离—有效系统速度曲线，并按固定绝对速度区间累计有效距离占比；计算规则位于 Domain，图表只负责展示，不新增持久化字段（`iOS/bike/bike/Domain/RideSpeedAnalysis.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`）。
-5. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
+5. 点击详情导航栏的系统分享图标时，页面以当前颜色主题将日期标题和详情指标内容离屏渲染为一张长图，再把 `UIImage` 交给 `UIActivityViewController`；渲染失败会记录错误并向用户提示，不会创建空白分享项（`iOS/bike/bike/Features/History/RideDetailView.swift`）。
+6. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
 
 ### 5. 网络状态
 
