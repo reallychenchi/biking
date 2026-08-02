@@ -7,7 +7,7 @@ import UIKit
 final class RideRouteSnapshotRenderer {
     static let shared = RideRouteSnapshotRenderer()
 
-    private static let cacheVersion = "v3"
+    private static let cacheVersion = "v5"
     private static let snapshotRetryDelay: Duration = .seconds(1)
     private static let snapshotTimeout: Duration = .seconds(4)
     private let memoryCache = NSCache<NSString, UIImage>()
@@ -19,12 +19,12 @@ final class RideRouteSnapshotRenderer {
         memoryCache.countLimit = 100
     }
 
-    func image(for ride: RideRecord, size: CGSize, appearance: AppAppearance) async -> UIImage? {
+    func rendering(for ride: RideRecord, size: CGSize, appearance: AppAppearance) async -> RideRouteThumbnailRendering? {
         let scale = UIScreen.main.scale
         let cacheKey = Self.cacheKey(for: ride, size: size, scale: scale, appearance: appearance)
         let memoryCacheKey = cacheKey as NSString
         if let cachedImage = memoryCache.object(forKey: memoryCacheKey) {
-            return cachedImage
+            return .image(cachedImage)
         }
 
         do {
@@ -32,7 +32,7 @@ final class RideRouteSnapshotRenderer {
                 if let cachedImage = UIImage(data: cachedData, scale: scale) {
                     memoryCache.setObject(cachedImage, forKey: memoryCacheKey)
                     AppLog.history.info("读取历史轨迹缩略图磁盘缓存成功 rideID=\(ride.id.uuidString, privacy: .public)")
-                    return cachedImage
+                    return .image(cachedImage)
                 }
                 AppLog.history.warning("历史轨迹缩略图磁盘缓存无效，将重新生成 rideID=\(ride.id.uuidString, privacy: .public)")
             }
@@ -61,8 +61,8 @@ final class RideRouteSnapshotRenderer {
         } catch is CancellationError {
             return nil
         } catch {
-            AppLog.history.warning("历史轨迹缩略图地图快照不可用，使用本地轨迹缩略图 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-            image = drawRouteFallback(geometry, size: size, traitCollection: traitCollection)
+            AppLog.history.warning("历史轨迹缩略图地图快照不可用，改用实时地图缩略图 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            return .liveMap
         }
 
         memoryCache.setObject(image, forKey: memoryCacheKey)
@@ -79,7 +79,7 @@ final class RideRouteSnapshotRenderer {
             AppLog.history.warning("历史轨迹缩略图 PNG 编码失败 rideID=\(ride.id.uuidString, privacy: .public)")
         }
         AppLog.history.info("历史轨迹缩略图生成成功 rideID=\(ride.id.uuidString, privacy: .public)")
-        return image
+        return .image(image)
     }
 
     private func createSnapshot(options: MKMapSnapshotter.Options) async throws -> MKMapSnapshotter.Snapshot {
@@ -194,48 +194,11 @@ final class RideRouteSnapshotRenderer {
         context.strokeEllipse(in: markerRect)
     }
 
-    private func drawRouteFallback(
-        _ geometry: RideRouteGeometry,
-        size: CGSize,
-        traitCollection: UITraitCollection
-    ) -> UIImage {
-        let renderer = UIGraphicsImageRenderer(size: size)
-        return renderer.image { context in
-            let backgroundColor = UIColor(AppTheme.pageBackground).resolvedColor(with: traitCollection)
-            context.cgContext.setFillColor(backgroundColor.cgColor)
-            context.cgContext.fill(CGRect(origin: .zero, size: size))
+}
 
-            guard let mapRect = geometry.mapRect else { return }
-            let routeColor = UIColor(AppTheme.accentForeground).resolvedColor(with: traitCollection)
-            context.cgContext.setLineCap(.round)
-            context.cgContext.setLineJoin(.round)
-            context.cgContext.setLineWidth(4)
-            context.cgContext.setStrokeColor(routeColor.cgColor)
-
-            for segment in geometry.segments where segment.count >= 2 {
-                let path = UIBezierPath()
-                path.move(to: fallbackPoint(for: segment[0], in: mapRect, size: size))
-                for coordinate in segment.dropFirst() {
-                    path.addLine(to: fallbackPoint(for: coordinate, in: mapRect, size: size))
-                }
-                path.stroke()
-            }
-
-            if let start = geometry.coordinates.first {
-                drawMarker(at: fallbackPoint(for: start, in: mapRect, size: size), color: .systemGreen, in: context.cgContext)
-            }
-            if let end = geometry.coordinates.last, geometry.coordinates.count > 1 {
-                drawMarker(at: fallbackPoint(for: end, in: mapRect, size: size), color: .systemRed, in: context.cgContext)
-            }
-        }
-    }
-
-    private func fallbackPoint(for coordinate: CLLocationCoordinate2D, in mapRect: MKMapRect, size: CGSize) -> CGPoint {
-        let mapPoint = MKMapPoint(coordinate)
-        let x = (mapPoint.x - mapRect.origin.x) / mapRect.size.width
-        let y = (mapPoint.y - mapRect.origin.y) / mapRect.size.height
-        return CGPoint(x: size.width * x, y: size.height * y)
-    }
+enum RideRouteThumbnailRendering {
+    case image(UIImage)
+    case liveMap
 }
 
 private enum MapSnapshotRequestError: Error {

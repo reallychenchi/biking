@@ -152,6 +152,7 @@ private struct RideRouteThumbnail: View {
     private enum LoadingState {
         case loading
         case loaded(UIImage)
+        case liveMap
         case failed
     }
 
@@ -173,6 +174,9 @@ private struct RideRouteThumbnail: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+            } else if case .liveMap = loadingState {
+                RideRouteView(ride: ride)
+                    .allowsHitTesting(false)
             } else if ride.points.isEmpty {
                 Image(systemName: "map")
                     .foregroundStyle(AppTheme.secondaryText)
@@ -196,12 +200,17 @@ private struct RideRouteThumbnail: View {
         .task(id: TaskID(updatedAt: ride.updatedAt, appearance: appearance)) {
             guard !ride.points.isEmpty else { return }
             loadingState = .loading
-            if let image = await RideRouteSnapshotRenderer.shared.image(
+            if let rendering = await RideRouteSnapshotRenderer.shared.rendering(
                 for: ride,
                 size: size,
                 appearance: appearance
             ) {
-                loadingState = .loaded(image)
+                switch rendering {
+                case let .image(image):
+                    loadingState = .loaded(image)
+                case .liveMap:
+                    loadingState = .liveMap
+                }
             } else if !Task.isCancelled {
                 loadingState = .failed
             }
