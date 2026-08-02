@@ -8,8 +8,11 @@ final class RideRouteSnapshotRenderer {
     static let shared = RideRouteSnapshotRenderer()
 
     private static let cacheVersion = "v3"
+    private static let snapshotRetryDelay: Duration = .seconds(1)
+    private static let snapshotTimeout: Duration = .seconds(4)
     private let memoryCache = NSCache<NSString, UIImage>()
     private let diskCache: RideRouteSnapshotDiskCache
+    private let snapshotRequestQueue = MapSnapshotRequestQueue()
 
     private init(diskCache: RideRouteSnapshotDiskCache = .shared) {
         self.diskCache = diskCache
@@ -50,30 +53,85 @@ final class RideRouteSnapshotRenderer {
         let traitCollection = UITraitCollection(userInterfaceStyle: appearance.userInterfaceStyle)
         options.traitCollection = traitCollection
 
+        let image: UIImage
         do {
-            let snapshot = try await MKMapSnapshotter(options: options).start()
+            let snapshot = try await createSnapshot(options: options)
             try Task.checkCancellation()
-            let image = drawRoute(geometry, on: snapshot, size: size, traitCollection: traitCollection)
-            memoryCache.setObject(image, forKey: memoryCacheKey)
-            if let imageData = image.pngData() {
-                Task { [diskCache] in
-                    do {
-                        try await diskCache.store(imageData, forKey: cacheKey)
-                        AppLog.history.info("历史轨迹缩略图磁盘缓存保存成功 rideID=\(ride.id.uuidString, privacy: .public)")
-                    } catch {
-                        AppLog.history.warning("历史轨迹缩略图磁盘缓存保存失败 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-                    }
-                }
-            } else {
-                AppLog.history.warning("历史轨迹缩略图 PNG 编码失败 rideID=\(ride.id.uuidString, privacy: .public)")
-            }
-            AppLog.history.info("历史轨迹缩略图生成成功 rideID=\(ride.id.uuidString, privacy: .public)")
-            return image
+            image = drawRoute(geometry, on: snapshot, size: size, traitCollection: traitCollection)
         } catch is CancellationError {
             return nil
         } catch {
-            AppLog.history.warning("历史轨迹缩略图生成失败 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-            return nil
+            AppLog.history.warning("历史轨迹缩略图地图快照不可用，使用本地轨迹缩略图 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            image = drawRouteFallback(geometry, size: size, traitCollection: traitCollection)
+        }
+
+        memoryCache.setObject(image, forKey: memoryCacheKey)
+        if let imageData = image.pngData() {
+            Task { [diskCache] in
+                do {
+                    try await diskCache.store(imageData, forKey: cacheKey)
+                    AppLog.history.info("历史轨迹缩略图磁盘缓存保存成功 rideID=\(ride.id.uuidString, privacy: .public)")
+                } catch {
+                    AppLog.history.warning("历史轨迹缩略图磁盘缓存保存失败 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                }
+            }
+        } else {
+            AppLog.history.warning("历史轨迹缩略图 PNG 编码失败 rideID=\(ride.id.uuidString, privacy: .public)")
+        }
+        AppLog.history.info("历史轨迹缩略图生成成功 rideID=\(ride.id.uuidString, privacy: .public)")
+        return image
+    }
+
+    private func createSnapshot(options: MKMapSnapshotter.Options) async throws -> MKMapSnapshotter.Snapshot {
+        do {
+            return try await performSnapshot(options: options)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            AppLog.history.warning("历史轨迹缩略图地图快照失败，将重试一次 error=\(error.localizedDescription, privacy: .public)")
+            try await Task.sleep(for: Self.snapshotRetryDelay)
+            return try await performSnapshot(options: options)
+        }
+    }
+
+    private func performSnapshot(options: MKMapSnapshotter.Options) async throws -> MKMapSnapshotter.Snapshot {
+        await snapshotRequestQueue.waitForTurn()
+        do {
+            let snapshot = try await snapshotWithTimeout(options: options)
+            await snapshotRequestQueue.finishTurn()
+            return snapshot
+        } catch {
+            await snapshotRequestQueue.finishTurn()
+            throw error
+        }
+    }
+
+    private func snapshotWithTimeout(options: MKMapSnapshotter.Options) async throws -> MKMapSnapshotter.Snapshot {
+        let snapshotter = MKMapSnapshotter(options: options)
+        let snapshotTask = Task { @MainActor [snapshotter] in
+            try Task.checkCancellation()
+            return try await snapshotter.start()
+        }
+
+        defer {
+            snapshotTask.cancel()
+            snapshotter.cancel()
+        }
+
+        return try await withThrowingTaskGroup(of: MKMapSnapshotter.Snapshot.self) { group in
+            group.addTask {
+                try await snapshotTask.value
+            }
+            group.addTask {
+                try await Task.sleep(for: Self.snapshotTimeout)
+                throw MapSnapshotRequestError.timedOut
+            }
+
+            guard let snapshot = try await group.next() else {
+                throw MapSnapshotRequestError.timedOut
+            }
+            group.cancelAll()
+            return snapshot
         }
     }
 
@@ -134,5 +192,76 @@ final class RideRouteSnapshotRenderer {
         context.setLineWidth(2)
         context.fillEllipse(in: markerRect)
         context.strokeEllipse(in: markerRect)
+    }
+
+    private func drawRouteFallback(
+        _ geometry: RideRouteGeometry,
+        size: CGSize,
+        traitCollection: UITraitCollection
+    ) -> UIImage {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { context in
+            let backgroundColor = UIColor(AppTheme.pageBackground).resolvedColor(with: traitCollection)
+            context.cgContext.setFillColor(backgroundColor.cgColor)
+            context.cgContext.fill(CGRect(origin: .zero, size: size))
+
+            guard let mapRect = geometry.mapRect else { return }
+            let routeColor = UIColor(AppTheme.accentForeground).resolvedColor(with: traitCollection)
+            context.cgContext.setLineCap(.round)
+            context.cgContext.setLineJoin(.round)
+            context.cgContext.setLineWidth(4)
+            context.cgContext.setStrokeColor(routeColor.cgColor)
+
+            for segment in geometry.segments where segment.count >= 2 {
+                let path = UIBezierPath()
+                path.move(to: fallbackPoint(for: segment[0], in: mapRect, size: size))
+                for coordinate in segment.dropFirst() {
+                    path.addLine(to: fallbackPoint(for: coordinate, in: mapRect, size: size))
+                }
+                path.stroke()
+            }
+
+            if let start = geometry.coordinates.first {
+                drawMarker(at: fallbackPoint(for: start, in: mapRect, size: size), color: .systemGreen, in: context.cgContext)
+            }
+            if let end = geometry.coordinates.last, geometry.coordinates.count > 1 {
+                drawMarker(at: fallbackPoint(for: end, in: mapRect, size: size), color: .systemRed, in: context.cgContext)
+            }
+        }
+    }
+
+    private func fallbackPoint(for coordinate: CLLocationCoordinate2D, in mapRect: MKMapRect, size: CGSize) -> CGPoint {
+        let mapPoint = MKMapPoint(coordinate)
+        let x = (mapPoint.x - mapRect.origin.x) / mapRect.size.width
+        let y = (mapPoint.y - mapRect.origin.y) / mapRect.size.height
+        return CGPoint(x: size.width * x, y: size.height * y)
+    }
+}
+
+private enum MapSnapshotRequestError: Error {
+    case timedOut
+}
+
+private actor MapSnapshotRequestQueue {
+    private var isProcessing = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func waitForTurn() async {
+        if !isProcessing {
+            isProcessing = true
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func finishTurn() {
+        if waiters.isEmpty {
+            isProcessing = false
+        } else {
+            waiters.removeFirst().resume()
+        }
     }
 }
