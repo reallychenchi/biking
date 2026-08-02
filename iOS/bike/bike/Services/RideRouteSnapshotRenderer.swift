@@ -7,7 +7,7 @@ import UIKit
 final class RideRouteSnapshotRenderer {
     static let shared = RideRouteSnapshotRenderer()
 
-    private static let cacheVersion = "v2"
+    private static let cacheVersion = "v3"
     private let memoryCache = NSCache<NSString, UIImage>()
     private let diskCache: RideRouteSnapshotDiskCache
 

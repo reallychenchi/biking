@@ -45,6 +45,10 @@ struct TrackPoint: Identifiable, Hashable, Sendable {
     var coordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }
+
+    var mapDisplayCoordinate: CLLocationCoordinate2D {
+        MapCoordinateConverter.mapDisplayCoordinate(for: coordinate)
+    }
 }
 
 struct RideRecord: Identifiable, Hashable, Sendable {

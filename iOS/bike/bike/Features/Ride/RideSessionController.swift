@@ -277,11 +277,11 @@ final class RideSessionController {
             activeRide.elevation.consume(accepted.point)
 
             if accepted.startedNewSegment {
-                activeRide.segments.append([accepted.point.coordinate])
+                activeRide.segments.append([accepted.point.mapDisplayCoordinate])
             } else if activeRide.segments.isEmpty {
-                activeRide.segments = [[accepted.point.coordinate]]
+                activeRide.segments = [[accepted.point.mapDisplayCoordinate]]
             } else {
-                activeRide.segments[activeRide.segments.count - 1].append(accepted.point.coordinate)
+                activeRide.segments[activeRide.segments.count - 1].append(accepted.point.mapDisplayCoordinate)
             }
 
             if !accepted.discardedDriftSegment,

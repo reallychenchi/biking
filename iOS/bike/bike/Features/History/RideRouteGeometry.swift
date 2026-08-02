@@ -19,7 +19,7 @@ struct RideRouteGeometry {
         guard let firstPoint = points.first else { return [] }
 
         var result: [[CLLocationCoordinate2D]] = []
-        var currentSegment = [firstPoint.coordinate]
+        var currentSegment = [firstPoint.mapDisplayCoordinate]
         var currentSegmentIndex = firstPoint.segmentIndex
 
         for point in points.dropFirst() {
@@ -28,7 +28,7 @@ struct RideRouteGeometry {
                 currentSegment = []
                 currentSegmentIndex = point.segmentIndex
             }
-            currentSegment.append(point.coordinate)
+            currentSegment.append(point.mapDisplayCoordinate)
         }
         result.append(currentSegment)
         return result

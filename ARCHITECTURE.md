@@ -54,7 +54,7 @@ bikeApp / AppDelegate
        -> NetworkStatusMonitor -> Network.framework
 
 SwiftDataRideRepository -> RideRepository + Domain models + SwiftData entities
-SwiftUI map views -> MapKit + read-only domain/controller projections
+SwiftUI map views -> MapKit + GCJ-02 display-coordinate projection + read-only domain/controller projections
 ```
 
 控制器和历史库依赖 `RideRepository` 协议，而不是 `SwiftDataRideRepository`（`iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Features/History/RideLibrary.swift`）。定位控制器依赖 `RideTrackingProviding`，具体实现位于服务层（`iOS/bike/bike/Services/RideTrackingService.swift`）。
@@ -75,7 +75,7 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 1. `RideView` 调用 `RideSessionController.startRide()`（`iOS/bike/bike/Features/Ride/RideView.swift`）。
 2. 控制器先通过 `RideTrackingProviding.prepareForRide()` 检查服务、授权与精确定位，再创建 SwiftData 临时骑行；任一步失败都显示错误并停止（`iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Services/RideTrackingService.swift`）。
 3. 控制器启动 1 秒计时任务、5 秒 checkpoint 任务和定位异步流，并创建后台定位活动（`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
-4. 每个样本先经过 `LocationSampleValidator`；有效水平点进入内存中的 pendingPoints/segments，更新距离、速度与 `MovementTimeAccumulator`，其海拔再由 `ElevationAccumulator` 独立进行垂直精度过滤、三点中值平滑和趋势累计（`iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift`、`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
+4. 每个样本先经过 `LocationSampleValidator`；有效水平点以原始 WGS-84 坐标进入内存中的 pendingPoints，更新距离、速度与 `MovementTimeAccumulator`；仅供 MapKit 实时绘制的 segments 会通过 `MapCoordinateConverter` 转为 GCJ-02。其海拔再由 `ElevationAccumulator` 独立进行垂直精度过滤、三点中值平滑和趋势累计（`iOS/bike/bike/Domain/LocationSampleValidator.swift`、`iOS/bike/bike/Domain/MapCoordinateConverter.swift`、`iOS/bike/bike/Domain/ElevationAccumulator.swift`、`iOS/bike/bike/Features/Ride/RideSessionController.swift`）。
 5. checkpoint 将待写点和指标通过仓储增量写入；成功后才从内存队列移除，失败则保留并展示警告（`iOS/bike/bike/Features/Ride/RideSessionController.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
 
 ### 3. 结束、保存与失败重试
@@ -88,7 +88,7 @@ SwiftUI map views -> MapKit + read-only domain/controller projections
 
 1. `RideLibrary.reload()` 查询完成记录，仓储按开始时间倒序映射实体为 `RideRecord`（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
 2. 列表项依次查询内存缓存和 App `Caches/RideRouteSnapshots` 磁盘缓存；均未命中时才异步使用 MapKit 生成等宽高地图快照并叠加分段轨迹和起终点。生成期间显示进度占位，成功后写入两级缓存并自动刷新（`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift`）。
-3. 详情页与缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；详情页以 MapKit polyline 展示并标记起终点（`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
+3. 详情页与缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；在将原始持久化坐标交给 MapKit 前，它们通过 `MapCoordinateConverter` 转为 GCJ-02，详情页再以 polyline 展示并标记起终点（`iOS/bike/bike/Domain/MapCoordinateConverter.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
 4. 详情页使用同一组持久化轨迹点派生累计距离—有效系统速度曲线，并按固定绝对速度区间累计有效距离占比；计算规则位于 Domain，图表只负责展示，不新增持久化字段（`iOS/bike/bike/Domain/RideSpeedAnalysis.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`）。
 5. 点击详情导航栏的系统分享图标时，页面以当前颜色主题将日期标题和详情指标内容离屏渲染为一张长图，再把 `UIImage` 交给 `UIActivityViewController`；渲染失败会记录错误并向用户提示，不会创建空白分享项（`iOS/bike/bike/Features/History/RideDetailView.swift`）。
 6. 删除先从 UI 暂存移除并提供 4 秒撤销；超时后才调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。

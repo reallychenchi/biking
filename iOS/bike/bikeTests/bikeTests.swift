@@ -1,3 +1,4 @@
+import CoreLocation
 import Foundation
 import SwiftData
 import Testing
@@ -5,6 +6,19 @@ import Testing
 
 @MainActor
 struct bikeTests {
+    @Test
+    func mapCoordinateConverterUsesGCJ02OnlyWithinMainlandChina() {
+        let beijingWGS84 = CLLocationCoordinate2D(latitude: 39.908_823, longitude: 116.397_47)
+        let beijingGCJ02 = MapCoordinateConverter.mapDisplayCoordinate(for: beijingWGS84)
+
+        #expect(abs(beijingGCJ02.latitude - 39.910_226) < 0.000_01)
+        #expect(abs(beijingGCJ02.longitude - 116.403_714) < 0.000_01)
+
+        let sanFrancisco = CLLocationCoordinate2D(latitude: 37.334_9, longitude: -122.009_02)
+        #expect(MapCoordinateConverter.mapDisplayCoordinate(for: sanFrancisco).latitude == sanFrancisco.latitude)
+        #expect(MapCoordinateConverter.mapDisplayCoordinate(for: sanFrancisco).longitude == sanFrancisco.longitude)
+    }
+
     @Test
     func validatorRejectsInvalidAccuracyAndTimestamp() {
         let start = Date(timeIntervalSince1970: 1_000)
