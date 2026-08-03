@@ -1,9 +1,10 @@
+import OSLog
 import SwiftUI
 
 struct HistoryView: View {
     let library: RideLibrary
     let startFirstRide: () -> Void
-    @State private var selectedRide: RideRecord?
+    @State private var selectedRide: RideSummary?
 
     var body: some View {
         NavigationStack {
@@ -16,7 +17,9 @@ struct HistoryView: View {
                             Button {
                                 selectedRide = ride
                             } label: {
-                                HistoryRideCard(ride: ride)
+                                HistoryRideCard(ride: ride) {
+                                    try await library.loadRide(id: ride.id).points
+                                }
                             }
                             .buttonStyle(.plain)
                             .listRowBackground(Color.clear)
@@ -61,8 +64,10 @@ struct HistoryView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.25), value: library.undoBannerMessage)
-            .navigationDestination(item: $selectedRide) { ride in
-                RideDetailView(ride: ride)
+            .navigationDestination(item: $selectedRide) { summary in
+                RideDetailView(summary: summary) {
+                    try await library.loadRide(id: summary.id)
+                }
             }
         }
     }
@@ -108,11 +113,16 @@ private struct UndoBanner: View {
 private struct HistoryRideCard: View {
     private static let snapshotSize = CGSize(width: 92, height: 92)
 
-    let ride: RideRecord
+    let ride: RideSummary
+    let loadPoints: () async throws -> [TrackPoint]
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            RideRouteThumbnail(ride: ride, size: Self.snapshotSize)
+            RideRouteThumbnail(
+                ride: ride,
+                size: Self.snapshotSize,
+                loadPoints: loadPoints
+            )
 
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
@@ -145,6 +155,7 @@ private struct HistoryRideCard: View {
 
 private struct RideRouteThumbnail: View {
     private struct TaskID: Hashable {
+        let rideID: UUID
         let updatedAt: Date
         let appearance: AppAppearance
     }
@@ -152,12 +163,14 @@ private struct RideRouteThumbnail: View {
     private enum LoadingState {
         case loading
         case loaded(UIImage)
-        case liveMap
+        case liveMap([TrackPoint])
+        case empty
         case failed
     }
 
-    let ride: RideRecord
+    let ride: RideSummary
     let size: CGSize
+    let loadPoints: () async throws -> [TrackPoint]
     @Environment(\.colorScheme) private var colorScheme
     @State private var loadingState = LoadingState.loading
 
@@ -170,25 +183,26 @@ private struct RideRouteThumbnail: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(AppTheme.pageBackground)
 
-            if case let .loaded(image) = loadingState {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else if case .liveMap = loadingState {
-                RideRouteView(ride: ride)
-                    .allowsHitTesting(false)
-            } else if ride.points.isEmpty {
-                Image(systemName: "map")
-                    .foregroundStyle(AppTheme.secondaryText)
-                    .accessibilityLabel("无轨迹数据")
-            } else if case .failed = loadingState {
-                Image(systemName: "map.fill")
-                    .foregroundStyle(AppTheme.secondaryText)
-                    .accessibilityLabel("轨迹图生成失败")
-            } else {
+            switch loadingState {
+            case .loading:
                 ProgressView()
                     .tint(AppTheme.accentForeground)
                     .accessibilityLabel("正在生成轨迹图")
+            case let .loaded(image):
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            case let .liveMap(points):
+                RideRouteView(points: points)
+                    .allowsHitTesting(false)
+            case .empty:
+                Image(systemName: "map")
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .accessibilityLabel("无轨迹数据")
+            case .failed:
+                Image(systemName: "map.fill")
+                    .foregroundStyle(AppTheme.secondaryText)
+                    .accessibilityLabel("轨迹读取失败")
             }
         }
         .frame(width: size.width, height: size.height)
@@ -197,22 +211,29 @@ private struct RideRouteThumbnail: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(AppTheme.separator.opacity(0.35), lineWidth: 1)
         }
-        .task(id: TaskID(updatedAt: ride.updatedAt, appearance: appearance)) {
-            guard !ride.points.isEmpty else { return }
+        .task(id: TaskID(rideID: ride.id, updatedAt: ride.updatedAt, appearance: appearance)) {
             loadingState = .loading
-            if let rendering = await RideRouteSnapshotRenderer.shared.rendering(
-                for: ride,
-                size: size,
-                appearance: appearance
-            ) {
+            do {
+                let rendering = try await RideRouteSnapshotRenderer.shared.rendering(
+                    rideID: ride.id,
+                    updatedAt: ride.updatedAt,
+                    size: size,
+                    appearance: appearance,
+                    loadPoints: loadPoints
+                )
                 switch rendering {
                 case let .image(image):
                     loadingState = .loaded(image)
-                case .liveMap:
-                    loadingState = .liveMap
+                case let .liveMap(points):
+                    loadingState = .liveMap(points)
+                case .empty:
+                    loadingState = .empty
                 }
-            } else if !Task.isCancelled {
+            } catch is CancellationError {
+                return
+            } catch {
                 loadingState = .failed
+                AppLog.history.error("Failed to load ride route thumbnail rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             }
         }
         .accessibilityElement(children: .contain)

@@ -14,14 +14,20 @@ final class RideRouteSnapshotRenderer {
     private let diskCache: RideRouteSnapshotDiskCache
     private let snapshotRequestQueue = MapSnapshotRequestQueue()
 
-    private init(diskCache: RideRouteSnapshotDiskCache = .shared) {
+    init(diskCache: RideRouteSnapshotDiskCache = .shared) {
         self.diskCache = diskCache
         memoryCache.countLimit = 100
     }
 
-    func rendering(for ride: RideRecord, size: CGSize, appearance: AppAppearance) async -> RideRouteThumbnailRendering? {
+    func rendering(
+        rideID: UUID,
+        updatedAt: Date,
+        size: CGSize,
+        appearance: AppAppearance,
+        loadPoints: () async throws -> [TrackPoint]
+    ) async throws -> RideRouteThumbnailRendering {
         let scale = UIScreen.main.scale
-        let cacheKey = Self.cacheKey(for: ride, size: size, scale: scale, appearance: appearance)
+        let cacheKey = Self.cacheKey(rideID: rideID, updatedAt: updatedAt, size: size, scale: scale, appearance: appearance)
         let memoryCacheKey = cacheKey as NSString
         if let cachedImage = memoryCache.object(forKey: memoryCacheKey) {
             return .image(cachedImage)
@@ -31,17 +37,21 @@ final class RideRouteSnapshotRenderer {
             if let cachedData = try await diskCache.data(forKey: cacheKey) {
                 if let cachedImage = UIImage(data: cachedData, scale: scale) {
                     memoryCache.setObject(cachedImage, forKey: memoryCacheKey)
-                    AppLog.history.info("读取历史轨迹缩略图磁盘缓存成功 rideID=\(ride.id.uuidString, privacy: .public)")
+                    AppLog.history.info("读取历史轨迹缩略图磁盘缓存成功 rideID=\(rideID.uuidString, privacy: .public)")
                     return .image(cachedImage)
                 }
-                AppLog.history.warning("历史轨迹缩略图磁盘缓存无效，将重新生成 rideID=\(ride.id.uuidString, privacy: .public)")
+                AppLog.history.warning("历史轨迹缩略图磁盘缓存无效，将重新生成 rideID=\(rideID.uuidString, privacy: .public)")
             }
         } catch {
-            AppLog.history.warning("读取历史轨迹缩略图磁盘缓存失败，将重新生成 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            AppLog.history.warning("读取历史轨迹缩略图磁盘缓存失败，将重新生成 rideID=\(rideID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
         }
 
-        let geometry = RideRouteGeometry(points: ride.points)
-        guard let mapRect = geometry.mapRect else { return nil }
+        try Task.checkCancellation()
+
+        let points = try await loadPoints()
+        try Task.checkCancellation()
+        let geometry = RideRouteGeometry(points: points)
+        guard let mapRect = geometry.mapRect else { return .empty }
 
         let options = MKMapSnapshotter.Options()
         options.mapRect = mapRect
@@ -59,10 +69,10 @@ final class RideRouteSnapshotRenderer {
             try Task.checkCancellation()
             image = drawRoute(geometry, on: snapshot, size: size, traitCollection: traitCollection)
         } catch is CancellationError {
-            return nil
+            throw CancellationError()
         } catch {
-            AppLog.history.warning("历史轨迹缩略图地图快照不可用，改用实时地图缩略图 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
-            return .liveMap
+            AppLog.history.warning("历史轨迹缩略图地图快照不可用，改用实时地图缩略图 rideID=\(rideID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            return .liveMap(points)
         }
 
         memoryCache.setObject(image, forKey: memoryCacheKey)
@@ -70,15 +80,15 @@ final class RideRouteSnapshotRenderer {
             Task { [diskCache] in
                 do {
                     try await diskCache.store(imageData, forKey: cacheKey)
-                    AppLog.history.info("历史轨迹缩略图磁盘缓存保存成功 rideID=\(ride.id.uuidString, privacy: .public)")
+                    AppLog.history.info("历史轨迹缩略图磁盘缓存保存成功 rideID=\(rideID.uuidString, privacy: .public)")
                 } catch {
-                    AppLog.history.warning("历史轨迹缩略图磁盘缓存保存失败 rideID=\(ride.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+                    AppLog.history.warning("历史轨迹缩略图磁盘缓存保存失败 rideID=\(rideID.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
                 }
             }
         } else {
-            AppLog.history.warning("历史轨迹缩略图 PNG 编码失败 rideID=\(ride.id.uuidString, privacy: .public)")
+            AppLog.history.warning("历史轨迹缩略图 PNG 编码失败 rideID=\(rideID.uuidString, privacy: .public)")
         }
-        AppLog.history.info("历史轨迹缩略图生成成功 rideID=\(ride.id.uuidString, privacy: .public)")
+        AppLog.history.info("历史轨迹缩略图生成成功 rideID=\(rideID.uuidString, privacy: .public)")
         return .image(image)
     }
 
@@ -135,14 +145,15 @@ final class RideRouteSnapshotRenderer {
         }
     }
 
-    private static func cacheKey(
-        for ride: RideRecord,
+    static func cacheKey(
+        rideID: UUID,
+        updatedAt: Date,
         size: CGSize,
         scale: CGFloat,
         appearance: AppAppearance
     ) -> String {
-        let updatedAtMilliseconds = Int64(ride.updatedAt.timeIntervalSince1970 * 1_000)
-        return "\(cacheVersion)-\(appearance.rawValue)-\(ride.id.uuidString)-\(updatedAtMilliseconds)-\(Int(size.width))x\(Int(size.height))-@\(Int(scale))x"
+        let updatedAtMilliseconds = Int64(updatedAt.timeIntervalSince1970 * 1_000)
+        return "\(cacheVersion)-\(appearance.rawValue)-\(rideID.uuidString)-\(updatedAtMilliseconds)-\(Int(size.width))x\(Int(size.height))-@\(Int(scale))x"
     }
 
     private func drawRoute(
@@ -198,7 +209,8 @@ final class RideRouteSnapshotRenderer {
 
 enum RideRouteThumbnailRendering {
     case image(UIImage)
-    case liveMap
+    case liveMap([TrackPoint])
+    case empty
 }
 
 private enum MapSnapshotRequestError: Error {

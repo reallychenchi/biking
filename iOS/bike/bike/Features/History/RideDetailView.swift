@@ -8,7 +8,16 @@ struct RideDetailView: View {
         case route
     }
 
-    let ride: RideRecord
+    private enum LoadState {
+        case loading
+        case loaded(RideRecord)
+        case failed(String)
+    }
+
+    let summary: RideSummary
+    let loadRide: () async throws -> RideRecord
+    @State private var loadState = LoadState.loading
+    @State private var retryToken = 0
     @State private var selectedTab = DetailTab.details
     @State private var sharePayload: RideSharePayload?
     @State private var shareError: ShareImageError?
@@ -18,27 +27,43 @@ struct RideDetailView: View {
 
     var body: some View {
         Group {
-            switch selectedTab {
-            case .details:
-                RideDetailInfoView(ride: ride)
-            case .route:
-                RideRouteView(ride: ride)
+            switch loadState {
+            case .loading:
+                ProgressView("正在加载…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppTheme.pageBackground.ignoresSafeArea())
+            case let .loaded(ride):
+                loadedBody(ride: ride)
+            case let .failed(message):
+                ContentUnavailableView {
+                    Label("加载失败", systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(AppTheme.primaryText)
+                } description: {
+                    Text(message)
+                        .foregroundStyle(AppTheme.secondaryText)
+                } actions: {
+                    Button("重试") { retryToken += 1 }
+                        .buttonStyle(.borderedProminent)
+                        .tint(AppTheme.primaryActionBackground)
+                        .foregroundStyle(AppTheme.primaryActionForeground)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(AppTheme.pageBackground.ignoresSafeArea())
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            detailTabBar
-        }
-        .navigationTitle(RideFormatting.date(ride.startDate))
+        .navigationTitle(RideFormatting.date(summary.startDate))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: shareDetail) {
-                    Image(systemName: "square.and.arrow.up")
+            if case let .loaded(ride) = loadState {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { shareDetail(ride: ride) } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("分享骑行详情")
                 }
-                .accessibilityLabel("分享骑行详情")
             }
         }
         .sheet(item: $sharePayload) { payload in
@@ -50,6 +75,34 @@ struct RideDetailView: View {
                 message: Text(error.localizedDescription),
                 dismissButton: .default(Text("知道了"))
             )
+        }
+        .task(id: TaskID(id: summary.id, token: retryToken)) {
+            loadState = .loading
+            do {
+                let record = try await loadRide()
+                try Task.checkCancellation()
+                loadState = .loaded(record)
+            } catch is CancellationError {
+                return
+            } catch {
+                loadState = .failed(error.localizedDescription)
+                AppLog.history.error("Failed to load ride detail rideID=\(summary.id.uuidString, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func loadedBody(ride: RideRecord) -> some View {
+        Group {
+            switch selectedTab {
+            case .details:
+                RideDetailInfoView(ride: ride)
+            case .route:
+                RideRouteView(points: ride.points)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            detailTabBar
         }
     }
 
@@ -85,7 +138,7 @@ struct RideDetailView: View {
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 
-    private func shareDetail() {
+    private func shareDetail(ride: RideRecord) {
         let renderer = ImageRenderer(
             content: RideDetailShareContent(ride: ride)
                 .environment(\.colorScheme, colorScheme)
@@ -101,6 +154,11 @@ struct RideDetailView: View {
 
         sharePayload = RideSharePayload(image: image)
         AppLog.history.info("Rendered ride detail share image for ride \(ride.id, privacy: .public)")
+    }
+
+    private struct TaskID: Equatable {
+        let id: UUID
+        let token: Int
     }
 }
 

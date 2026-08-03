@@ -51,6 +51,14 @@ struct TrackPoint: Identifiable, Hashable, Sendable {
     }
 }
 
+struct RideSummary: Identifiable, Hashable, Sendable {
+    let id: UUID
+    let startDate: Date
+    let distanceMeters: Double
+    let averageSpeedMetersPerSecond: Double
+    let updatedAt: Date
+}
+
 struct RideRecord: Identifiable, Hashable, Sendable {
     let id: UUID
     let status: RideStatus

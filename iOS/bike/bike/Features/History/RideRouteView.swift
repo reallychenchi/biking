@@ -5,8 +5,8 @@ struct RideRouteView: View {
     private let geometry: RideRouteGeometry
     private let initialMapPosition: MapCameraPosition
 
-    init(ride: RideRecord) {
-        let geometry = RideRouteGeometry(points: ride.points)
+    init(points: [TrackPoint]) {
+        let geometry = RideRouteGeometry(points: points)
         self.geometry = geometry
         self.initialMapPosition = geometry.mapRect.map(MapCameraPosition.rect) ?? .automatic
     }

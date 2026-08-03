@@ -24,13 +24,31 @@ actor SwiftDataRideRepository: RideRepository {
         try modelContext.save()
     }
 
-    func completedRides() throws -> [RideRecord] {
+    func completedRideSummaries() throws -> [RideSummary] {
+        let completedStatus = RideStatus.completed.rawValue
         let descriptor = FetchDescriptor<RideEntity>(
+            predicate: #Predicate { ride in
+                ride.statusRawValue == completedStatus
+            },
             sortBy: [SortDescriptor(\RideEntity.startDate, order: .reverse)]
         )
-        return try modelContext.fetch(descriptor)
-            .filter { $0.statusRawValue == RideStatus.completed.rawValue }
-            .map(domainModel)
+        return try modelContext.fetch(descriptor).map(summaryModel)
+    }
+
+    func completedRide(id: UUID) throws -> RideRecord {
+        let completedStatus = RideStatus.completed.rawValue
+        var descriptor = FetchDescriptor<RideEntity>(
+            predicate: #Predicate { ride in
+                ride.id == id && ride.statusRawValue == completedStatus
+            }
+        )
+        descriptor.fetchLimit = 1
+        descriptor.relationshipKeyPathsForPrefetching = [\RideEntity.points]
+
+        guard let entity = try modelContext.fetch(descriptor).first else {
+            throw RideRepositoryError.rideNotFound(id)
+        }
+        return try domainModel(entity)
     }
 
     func unfinishedRideIDs() throws -> [UUID] {
@@ -77,6 +95,16 @@ actor SwiftDataRideRepository: RideRepository {
         ride.minimumAltitudeMeters = progress.minimumAltitudeMeters
         ride.maximumAltitudeMeters = progress.maximumAltitudeMeters
         ride.updatedAt = progress.updatedAt
+    }
+
+    private func summaryModel(_ entity: RideEntity) -> RideSummary {
+        RideSummary(
+            id: entity.id,
+            startDate: entity.startDate,
+            distanceMeters: entity.distanceMeters,
+            averageSpeedMetersPerSecond: entity.averageSpeedMetersPerSecond,
+            updatedAt: entity.updatedAt
+        )
     }
 
     private func domainModel(_ entity: RideEntity) throws -> RideRecord {

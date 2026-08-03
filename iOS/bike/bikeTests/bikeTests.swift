@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import SwiftData
 import Testing
+import UIKit
 @testable import bike
 
 @MainActor
@@ -379,6 +380,125 @@ struct bikeTests {
     }
 
     @Test
+    func snapshotRendererCacheKeyFormatIsStable() {
+        let rideID = UUID(uuidString: "12345678-1234-1234-1234-123456789012")!
+        let updatedAt = Date(timeIntervalSince1970: 1_000)
+        let size = CGSize(width: 92, height: 92)
+        let key = RideRouteSnapshotRenderer.cacheKey(
+            rideID: rideID,
+            updatedAt: updatedAt,
+            size: size,
+            scale: 3,
+            appearance: .light
+        )
+        #expect(key == "v5-light-12345678-1234-1234-1234-123456789012-1000000-92x92-@3x")
+    }
+
+    @Test
+    func snapshotRendererDiskCacheHitSkipsLoader() async throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let rideID = UUID()
+        let updatedAt = Date(timeIntervalSince1970: 10_000)
+        let size = CGSize(width: 92, height: 92)
+        let scale = UIScreen.main.scale
+
+        let imgRenderer = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1))
+        let image = imgRenderer.image { context in
+            context.cgContext.setFillColor(UIColor.red.cgColor)
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        guard let pngData = image.pngData() else {
+            Issue.record("Failed to create test PNG")
+            return
+        }
+
+        let diskCache = RideRouteSnapshotDiskCache(directoryURL: directoryURL)
+        let cacheKey = RideRouteSnapshotRenderer.cacheKey(
+            rideID: rideID,
+            updatedAt: updatedAt,
+            size: size,
+            scale: scale,
+            appearance: .light
+        )
+        try await diskCache.store(pngData, forKey: cacheKey)
+
+        let renderer = RideRouteSnapshotRenderer(diskCache: diskCache)
+        var loaderCallCount = 0
+
+        let first = try await renderer.rendering(
+            rideID: rideID,
+            updatedAt: updatedAt,
+            size: size,
+            appearance: .light,
+            loadPoints: { loaderCallCount += 1; return [] }
+        )
+        guard case .image = first else {
+            Issue.record("Expected .image from disk cache hit, got \(first)")
+            return
+        }
+        #expect(loaderCallCount == 0)
+
+        let second = try await renderer.rendering(
+            rideID: rideID,
+            updatedAt: updatedAt,
+            size: size,
+            appearance: .light,
+            loadPoints: { loaderCallCount += 1; return [] }
+        )
+        guard case .image = second else {
+            Issue.record("Expected .image from memory cache hit")
+            return
+        }
+        #expect(loaderCallCount == 0)
+    }
+
+    @Test
+    func snapshotRendererEmptyPointsReturnsEmpty() async throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let diskCache = RideRouteSnapshotDiskCache(directoryURL: directoryURL)
+        let renderer = RideRouteSnapshotRenderer(diskCache: diskCache)
+
+        let result = try await renderer.rendering(
+            rideID: UUID(),
+            updatedAt: Date(),
+            size: CGSize(width: 92, height: 92),
+            appearance: .light,
+            loadPoints: { [] }
+        )
+        guard case .empty = result else {
+            Issue.record("Expected .empty for zero points, got \(result)")
+            return
+        }
+    }
+
+    @Test
+    func snapshotRendererCacheMissLoaderErrorPropagates() async throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+        let diskCache = RideRouteSnapshotDiskCache(directoryURL: directoryURL)
+        let renderer = RideRouteSnapshotRenderer(diskCache: diskCache)
+        let missingID = UUID()
+
+        await #expect(throws: RideRepositoryError.self) {
+            _ = try await renderer.rendering(
+                rideID: UUID(),
+                updatedAt: Date(),
+                size: CGSize(width: 92, height: 92),
+                appearance: .light,
+                loadPoints: { throw RideRepositoryError.rideNotFound(missingID) }
+            )
+        }
+    }
+
+    @Test
     func movementTimeUsesHysteresisAndStopsForStaleSpeed() {
         var accumulator = MovementTimeAccumulator()
 
@@ -453,20 +573,128 @@ struct bikeTests {
         try await repository.completeRide(completion, pendingPoints: [point])
         try await repository.completeRide(completion, pendingPoints: [point])
 
-        let records = try await repository.completedRides()
-        #expect(records.count == 1)
-        #expect(records.first?.status == .completed)
-        #expect(records.first?.distanceMeters == 500)
-        #expect(records.first?.totalElapsedSeconds == 100)
-        #expect(records.first?.movingElapsedSeconds == 80)
-        #expect(records.first?.overallSpeedMetersPerSecond == 5)
-        #expect(records.first?.averageSpeedMetersPerSecond == 6.25)
-        #expect(records.first?.cumulativeAscentMeters == 12)
-        #expect(records.first?.cumulativeDescentMeters == 8)
-        #expect(records.first?.minimumAltitudeMeters == 100)
-        #expect(records.first?.maximumAltitudeMeters == 112)
-        #expect(records.first?.points == [point])
+        let summaries = try await repository.completedRideSummaries()
+        #expect(summaries.count == 1)
+        #expect(summaries.first?.distanceMeters == 500)
+        #expect(summaries.first?.averageSpeedMetersPerSecond == 6.25)
         #expect(try await repository.unfinishedRideIDs().isEmpty)
+
+        let record = try await repository.completedRide(id: rideID)
+        #expect(record.status == .completed)
+        #expect(record.distanceMeters == 500)
+        #expect(record.totalElapsedSeconds == 100)
+        #expect(record.movingElapsedSeconds == 80)
+        #expect(record.overallSpeedMetersPerSecond == 5)
+        #expect(record.averageSpeedMetersPerSecond == 6.25)
+        #expect(record.cumulativeAscentMeters == 12)
+        #expect(record.cumulativeDescentMeters == 8)
+        #expect(record.minimumAltitudeMeters == 100)
+        #expect(record.maximumAltitudeMeters == 112)
+        #expect(record.points == [point])
+    }
+
+    @Test
+    func completedRideSummariesFiltersAndSorts() async throws {
+        let container = try ModelContainer(
+            for: RideEntity.self,
+            TrackPointEntity.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let repository = SwiftDataRideRepository(modelContainer: container)
+
+        let earlyStart = Date(timeIntervalSince1970: 1_000)
+        let lateStart = Date(timeIntervalSince1970: 2_000)
+        let progress = RideProgress(
+            totalElapsedSeconds: 60,
+            movingElapsedSeconds: 50,
+            distanceMeters: 300,
+            maximumSpeedMetersPerSecond: 5,
+            overallSpeedMetersPerSecond: 4,
+            averageSpeedMetersPerSecond: 3.5,
+            cumulativeAscentMeters: nil,
+            cumulativeDescentMeters: nil,
+            minimumAltitudeMeters: nil,
+            maximumAltitudeMeters: nil,
+            updatedAt: lateStart
+        )
+
+        let earlyID = UUID()
+        let lateID = UUID()
+        let recordingID = UUID()
+
+        try await repository.createTemporaryRide(id: earlyID, startDate: earlyStart, createdAt: earlyStart)
+        try await repository.completeRide(
+            RideCompletionSnapshot(rideID: earlyID, endDate: earlyStart.addingTimeInterval(60), progress: progress),
+            pendingPoints: []
+        )
+
+        try await repository.createTemporaryRide(id: lateID, startDate: lateStart, createdAt: lateStart)
+        try await repository.completeRide(
+            RideCompletionSnapshot(rideID: lateID, endDate: lateStart.addingTimeInterval(60), progress: progress),
+            pendingPoints: []
+        )
+
+        try await repository.createTemporaryRide(id: recordingID, startDate: lateStart, createdAt: lateStart)
+
+        let summaries = try await repository.completedRideSummaries()
+        #expect(summaries.count == 2)
+        #expect(summaries[0].id == lateID)
+        #expect(summaries[1].id == earlyID)
+        #expect(summaries[0].distanceMeters == 300)
+        #expect(summaries[0].averageSpeedMetersPerSecond == 3.5)
+    }
+
+    @Test
+    func completedRideByIDReturnsSortedPoints() async throws {
+        let container = try ModelContainer(
+            for: RideEntity.self,
+            TrackPointEntity.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let repository = SwiftDataRideRepository(modelContainer: container)
+
+        let start = Date(timeIntervalSince1970: 5_000)
+        let rideID = UUID()
+        let point0 = TrackPoint(
+            id: UUID(), sequence: 0, latitude: 39.9, longitude: 116.4,
+            timestamp: start, horizontalAccuracy: 5, systemSpeedMetersPerSecond: 3, segmentIndex: 0
+        )
+        let point1 = TrackPoint(
+            id: UUID(), sequence: 1, latitude: 39.91, longitude: 116.41,
+            timestamp: start.addingTimeInterval(5), horizontalAccuracy: 5, systemSpeedMetersPerSecond: 3, segmentIndex: 0
+        )
+        let progress = RideProgress(
+            totalElapsedSeconds: 10, movingElapsedSeconds: 10, distanceMeters: 100,
+            maximumSpeedMetersPerSecond: 3, overallSpeedMetersPerSecond: 3, averageSpeedMetersPerSecond: 3,
+            cumulativeAscentMeters: nil, cumulativeDescentMeters: nil,
+            minimumAltitudeMeters: nil, maximumAltitudeMeters: nil,
+            updatedAt: start.addingTimeInterval(10)
+        )
+
+        try await repository.createTemporaryRide(id: rideID, startDate: start, createdAt: start)
+        try await repository.completeRide(
+            RideCompletionSnapshot(rideID: rideID, endDate: start.addingTimeInterval(10), progress: progress),
+            pendingPoints: [point1, point0]
+        )
+
+        let record = try await repository.completedRide(id: rideID)
+        #expect(record.points.count == 2)
+        #expect(record.points[0].sequence == 0)
+        #expect(record.points[1].sequence == 1)
+
+        let missingID = UUID()
+        await #expect(throws: RideRepositoryError.self) {
+            _ = try await repository.completedRide(id: missingID)
+        }
+    }
+
+    @Test
+    func rideLibraryReloadOnlyCallsSummaryAPI() async {
+        let repository = FakeRideRepository()
+        let library = await RideLibrary(repository: repository)
+        await library.reload()
+        #expect(await repository.summaryCallCount() == 1)
+        #expect(await repository.detailCallCount() == 0)
     }
 
     @Test
@@ -589,6 +817,8 @@ private actor FakeRideRepository: RideRepository {
     private var completed = 0
     private var deleted = 0
     private var failCompletion = false
+    private var summaryCalls = 0
+    private var detailCalls = 0
 
     func createTemporaryRide(id: UUID, startDate: Date, createdAt: Date) { created += 1 }
     func appendCheckpoint(rideID: UUID, points: [TrackPoint], progress: RideProgress) {}
@@ -596,7 +826,14 @@ private actor FakeRideRepository: RideRepository {
         if failCompletion { throw FakeError.saveFailed }
         completed += 1
     }
-    func completedRides() -> [RideRecord] { [] }
+    func completedRideSummaries() -> [RideSummary] {
+        summaryCalls += 1
+        return []
+    }
+    func completedRide(id: UUID) throws -> RideRecord {
+        detailCalls += 1
+        throw RideRepositoryError.rideNotFound(id)
+    }
     func unfinishedRideIDs() -> [UUID] { [] }
     func discardUnfinishedRides() {}
     func deleteRide(id: UUID) { deleted += 1 }
@@ -605,6 +842,8 @@ private actor FakeRideRepository: RideRepository {
     func createdRideCount() -> Int { created }
     func completedRideCount() -> Int { completed }
     func deletedRideCount() -> Int { deleted }
+    func summaryCallCount() -> Int { summaryCalls }
+    func detailCallCount() -> Int { detailCalls }
 }
 
 @MainActor

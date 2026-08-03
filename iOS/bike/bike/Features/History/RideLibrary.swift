@@ -5,11 +5,11 @@ import OSLog
 @MainActor
 @Observable
 final class RideLibrary {
-    private(set) var rides: [RideRecord] = []
+    private(set) var rides: [RideSummary] = []
     private(set) var errorMessage: String?
     private(set) var undoBannerMessage: String?
 
-    private var pendingDelete: RideRecord?
+    private var pendingDelete: RideSummary?
     private var commitTask: Task<Void, Never>?
 
     private let repository: any RideRepository
@@ -20,7 +20,7 @@ final class RideLibrary {
 
     func reload() async {
         do {
-            rides = try await repository.completedRides()
+            rides = try await repository.completedRideSummaries()
             errorMessage = nil
         } catch {
             errorMessage = "历史记录读取失败：\(error.localizedDescription)"
@@ -28,7 +28,11 @@ final class RideLibrary {
         }
     }
 
-    func stageDelete(ride: RideRecord) {
+    func loadRide(id: UUID) async throws -> RideRecord {
+        try await repository.completedRide(id: id)
+    }
+
+    func stageDelete(ride: RideSummary) {
         commitTask?.cancel()
         if let previous = pendingDelete {
             Task { [repository] in
