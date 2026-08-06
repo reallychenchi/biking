@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import AppIntents
 import UMCommon
 import UMAPM
 
@@ -22,12 +23,12 @@ struct bikeApp: App {
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             let container = try ModelContainer(for: schema, configurations: [configuration])
-            sharedModelContainer = container
-            _appModel = State(
-                initialValue: AppModel(
-                    repository: SwiftDataRideRepository(modelContainer: container)
-                )
+            let appModel = AppModel(
+                repository: SwiftDataRideRepository(modelContainer: container)
             )
+            sharedModelContainer = container
+            _appModel = State(initialValue: appModel)
+            AppDependencyManager.shared.add(dependency: appModel)
         } catch {
             fatalError("Could not create local ride storage: \(error)")
         }
