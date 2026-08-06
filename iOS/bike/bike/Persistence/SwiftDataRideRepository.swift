@@ -102,6 +102,8 @@ actor SwiftDataRideRepository: RideRepository {
             id: entity.id,
             startDate: entity.startDate,
             distanceMeters: entity.distanceMeters,
+            maximumSpeedMetersPerSecond: entity.maximumSpeedMetersPerSecond,
+            overallSpeedMetersPerSecond: entity.overallSpeedMetersPerSecond,
             averageSpeedMetersPerSecond: entity.averageSpeedMetersPerSecond,
             updatedAt: entity.updatedAt
         )

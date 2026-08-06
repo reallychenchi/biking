@@ -55,8 +55,42 @@ struct RideSummary: Identifiable, Hashable, Sendable {
     let id: UUID
     let startDate: Date
     let distanceMeters: Double
+    let maximumSpeedMetersPerSecond: Double
+    let overallSpeedMetersPerSecond: Double
     let averageSpeedMetersPerSecond: Double
     let updatedAt: Date
+}
+
+struct RidePersonalStats: Hashable, Sendable {
+    let totalDistanceMeters: Double
+    let longestDistanceRide: RideSummary?
+    let fastestMaximumSpeedRide: RideSummary?
+    let fastestAverageSpeedRide: RideSummary?
+    let fastestOverallSpeedRide: RideSummary?
+
+    init(rides: [RideSummary]) {
+        totalDistanceMeters = rides.reduce(0) { $0 + $1.distanceMeters }
+        longestDistanceRide = rides.max(by: Self.isShorterDistance)
+        fastestMaximumSpeedRide = rides.max(by: Self.isSlowerMaximumSpeed)
+        fastestAverageSpeedRide = rides.max(by: Self.isSlowerAverageSpeed)
+        fastestOverallSpeedRide = rides.max(by: Self.isSlowerOverallSpeed)
+    }
+
+    private static func isShorterDistance(_ lhs: RideSummary, _ rhs: RideSummary) -> Bool {
+        lhs.distanceMeters < rhs.distanceMeters
+    }
+
+    private static func isSlowerMaximumSpeed(_ lhs: RideSummary, _ rhs: RideSummary) -> Bool {
+        lhs.maximumSpeedMetersPerSecond < rhs.maximumSpeedMetersPerSecond
+    }
+
+    private static func isSlowerAverageSpeed(_ lhs: RideSummary, _ rhs: RideSummary) -> Bool {
+        lhs.averageSpeedMetersPerSecond < rhs.averageSpeedMetersPerSecond
+    }
+
+    private static func isSlowerOverallSpeed(_ lhs: RideSummary, _ rhs: RideSummary) -> Bool {
+        lhs.overallSpeedMetersPerSecond < rhs.overallSpeedMetersPerSecond
+    }
 }
 
 struct RideRecord: Identifiable, Hashable, Sendable {

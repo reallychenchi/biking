@@ -5,53 +5,120 @@ enum RideSpeedAnomalyConfiguration {
     static let contextualHighSpeedMetersPerSecond = 40.0 / 3.6
     static let neighborDropMetersPerSecond = 10.0 / 3.6
     static let minimumSpikeAccelerationMetersPerSecondSquared = 3.0
+    static let robustMaximumSpeedWindowSeconds: TimeInterval = 5
+    static let minimumRobustWindowSampleCount = 3
+    static let trimmedWindowSampleCount = 5
 }
 
 enum RideSpeedAnomalyFilter {
     struct StreamingState: Hashable, Sendable {
-        private var window: [TrackPoint] = []
-        private var evaluatedThroughSequence: Int?
+        private var points: [TrackPoint] = []
 
         mutating func consume(_ point: TrackPoint) -> Double? {
-            window.append(point)
-            guard window.count == 3 else { return nil }
-
-            let previous = window[0]
-            let candidate = window[1]
-            let next = window[2]
-            evaluatedThroughSequence = candidate.sequence
-            window.removeFirst()
-            return RideSpeedAnomalyFilter.validSpeed(for: candidate, previous: previous, next: next)
+            points.append(point)
+            guard points.count >= RideSpeedAnomalyConfiguration.minimumRobustWindowSampleCount else {
+                return nil
+            }
+            return RideSpeedAnomalyFilter.estimatedMaximumSpeed(points: points, includesBoundarySpeeds: false)
         }
 
         mutating func finish() -> [Double] {
             defer {
-                window.removeAll()
-                evaluatedThroughSequence = nil
+                points.removeAll()
             }
-
-            return window.compactMap { point in
-                if let evaluatedThroughSequence, point.sequence <= evaluatedThroughSequence {
-                    return nil
-                }
-                return RideSpeedAnomalyFilter.validSpeed(for: point, previous: nil, next: nil)
-            }
+            let maximumSpeed = RideSpeedAnomalyFilter.estimatedMaximumSpeed(points: points)
+            return maximumSpeed > 0 ? [maximumSpeed] : []
         }
     }
 
     static func maximumValidSpeed(points: [TrackPoint]) -> Double {
+        estimatedMaximumSpeed(points: points)
+    }
+
+    static func estimatedMaximumSpeed(points: [TrackPoint]) -> Double {
+        estimatedMaximumSpeed(points: points, includesBoundarySpeeds: true)
+    }
+
+    private static func estimatedMaximumSpeed(
+        points: [TrackPoint],
+        includesBoundarySpeeds: Bool
+    ) -> Double {
+        let samples = speedSamples(points: points, includesBoundarySpeeds: includesBoundarySpeeds)
+        guard samples.count >= RideSpeedAnomalyConfiguration.minimumRobustWindowSampleCount else {
+            return samples.map(\.speedMetersPerSecond).max() ?? 0
+        }
+
+        var maximumSpeed = 0.0
+        for startIndex in samples.indices {
+            var window: [SpeedSample] = []
+            for sample in samples[startIndex...] {
+                if sample.segmentIndex != samples[startIndex].segmentIndex {
+                    break
+                }
+                guard sample.timestamp.timeIntervalSince(samples[startIndex].timestamp)
+                    <= RideSpeedAnomalyConfiguration.robustMaximumSpeedWindowSeconds else {
+                    break
+                }
+                window.append(sample)
+                if window.count >= RideSpeedAnomalyConfiguration.minimumRobustWindowSampleCount {
+                    maximumSpeed = max(maximumSpeed, robustSpeed(samples: window))
+                }
+            }
+        }
+        return maximumSpeed
+    }
+
+    private struct SpeedSample: Hashable, Sendable {
+        let sequence: Int
+        let timestamp: Date
+        let segmentIndex: Int
+        let speedMetersPerSecond: Double
+    }
+
+    private static func speedSamples(
+        points: [TrackPoint],
+        includesBoundarySpeeds: Bool
+    ) -> [SpeedSample] {
         let sortedPoints = points.sorted { $0.sequence < $1.sequence }
-        guard !sortedPoints.isEmpty else { return 0 }
-        return sortedPoints.indices.reduce(0) { maximumSpeed, index in
+        return sortedPoints.indices.compactMap { index in
+            guard includesBoundarySpeeds
+                    || (index > sortedPoints.startIndex && index < sortedPoints.index(before: sortedPoints.endIndex)) else {
+                return nil
+            }
             let previous = index > sortedPoints.startIndex
                 ? sortedPoints[sortedPoints.index(before: index)]
                 : nil
             let next = index < sortedPoints.index(before: sortedPoints.endIndex)
                 ? sortedPoints[sortedPoints.index(after: index)]
                 : nil
-            let speed = validSpeed(for: sortedPoints[index], previous: previous, next: next) ?? 0
-            return max(maximumSpeed, speed)
+            guard let speed = validSpeed(for: sortedPoints[index], previous: previous, next: next) else {
+                return nil
+            }
+            return SpeedSample(
+                sequence: sortedPoints[index].sequence,
+                timestamp: sortedPoints[index].timestamp,
+                segmentIndex: sortedPoints[index].segmentIndex,
+                speedMetersPerSecond: speed
+            )
         }
+    }
+
+    private static func robustSpeed(samples: [SpeedSample]) -> Double {
+        let sortedSpeeds = samples.map(\.speedMetersPerSecond).sorted()
+        guard sortedSpeeds.count >= RideSpeedAnomalyConfiguration.trimmedWindowSampleCount else {
+            return median(sortedSpeeds)
+        }
+        let trimmedSpeeds = sortedSpeeds.dropFirst().dropLast()
+        return trimmedSpeeds.reduce(0, +) / Double(trimmedSpeeds.count)
+    }
+
+    private static func median(_ sortedSpeeds: [Double]) -> Double {
+        guard !sortedSpeeds.isEmpty else { return 0 }
+        let middleIndex = sortedSpeeds.count / 2
+        if sortedSpeeds.count.isMultiple(of: 2) {
+            return (sortedSpeeds[middleIndex - 1] + sortedSpeeds[middleIndex]) / 2
+        }
+        return sortedSpeeds[middleIndex]
     }
 
     static func validSpeed(for point: TrackPoint, previous: TrackPoint?, next: TrackPoint?) -> Double? {

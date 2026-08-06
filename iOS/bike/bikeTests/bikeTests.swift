@@ -116,6 +116,46 @@ struct bikeTests {
     }
 
     @Test
+    func personalStatsSelectsBestRidesAndTotalDistance() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let longest = RideSummary(
+            id: UUID(),
+            startDate: start,
+            distanceMeters: 2_000,
+            maximumSpeedMetersPerSecond: 4,
+            overallSpeedMetersPerSecond: 5,
+            averageSpeedMetersPerSecond: 6,
+            updatedAt: start
+        )
+        let maximumSpeed = RideSummary(
+            id: UUID(),
+            startDate: start.addingTimeInterval(60),
+            distanceMeters: 1_000,
+            maximumSpeedMetersPerSecond: 8,
+            overallSpeedMetersPerSecond: 4,
+            averageSpeedMetersPerSecond: 3,
+            updatedAt: start
+        )
+        let averageSpeed = RideSummary(
+            id: UUID(),
+            startDate: start.addingTimeInterval(120),
+            distanceMeters: 500,
+            maximumSpeedMetersPerSecond: 6,
+            overallSpeedMetersPerSecond: 7,
+            averageSpeedMetersPerSecond: 9,
+            updatedAt: start
+        )
+
+        let stats = RidePersonalStats(rides: [longest, maximumSpeed, averageSpeed])
+
+        #expect(stats.totalDistanceMeters == 3_500)
+        #expect(stats.longestDistanceRide?.id == longest.id)
+        #expect(stats.fastestMaximumSpeedRide?.id == maximumSpeed.id)
+        #expect(stats.fastestAverageSpeedRide?.id == averageSpeed.id)
+        #expect(stats.fastestOverallSpeedRide?.id == averageSpeed.id)
+    }
+
+    @Test
     func elevationAccumulatorCountsGradualAscentAndDescent() {
         let ascent = elevationMetrics([100, 101, 102, 103, 104])
         #expect(ascent.cumulativeAscentMeters == 4)
@@ -311,12 +351,12 @@ struct bikeTests {
     }
 
     @Test
-    func speedAnomalyFilterRemovesSinglePointBacktrackSpike() {
+    func speedAnomalyFilterUsesRobustWindowForBacktrackSpike() {
         let points = speedSpikeFixture()
         let analysis = RideSpeedAnalysis(points: points)
 
         #expect(!analysis.chartPoints.map(\.sequence).contains(1741))
-        #expect(abs(RideSpeedAnomalyFilter.maximumValidSpeed(points: points) - 37.762 / 3.6) < 0.001)
+        #expect(abs(RideSpeedAnomalyFilter.maximumValidSpeed(points: points) - 26.267 / 3.6) < 0.001)
 
         var streaming = RideSpeedAnomalyFilter.StreamingState()
         var maximumSpeed = 0.0
@@ -329,11 +369,11 @@ struct bikeTests {
             maximumSpeed = max(maximumSpeed, speed)
         }
 
-        #expect(abs(maximumSpeed - 37.762 / 3.6) < 0.001)
+        #expect(abs(maximumSpeed - 26.267 / 3.6) < 0.001)
     }
 
     @Test
-    func speedAnomalyFilterKeepsSupportedHighSpeedPoints() {
+    func speedAnomalyFilterKeepsSupportedHighSpeedWindow() {
         let start = Date(timeIntervalSince1970: 3_800)
         let points = [
             trackPoint(sequence: 0, longitude: 116.0000, segmentIndex: 0, date: start, speedMetersPerSecond: 38 / 3.6),
@@ -344,7 +384,7 @@ struct bikeTests {
         let validSpeed = RideSpeedAnomalyFilter.validSpeed(for: points[1], previous: points[0], next: points[2])
 
         #expect(abs((validSpeed ?? 0) - 42 / 3.6) < 0.001)
-        #expect(abs(RideSpeedAnomalyFilter.maximumValidSpeed(points: points) - 43 / 3.6) < 0.001)
+        #expect(abs(RideSpeedAnomalyFilter.maximumValidSpeed(points: points) - 42 / 3.6) < 0.001)
     }
 
     @Test
@@ -613,6 +653,8 @@ struct bikeTests {
         let summaries = try await repository.completedRideSummaries()
         #expect(summaries.count == 1)
         #expect(summaries.first?.distanceMeters == 500)
+        #expect(summaries.first?.maximumSpeedMetersPerSecond == 6)
+        #expect(summaries.first?.overallSpeedMetersPerSecond == 5)
         #expect(summaries.first?.averageSpeedMetersPerSecond == 6.25)
         #expect(try await repository.unfinishedRideIDs().isEmpty)
 

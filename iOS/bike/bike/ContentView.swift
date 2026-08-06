@@ -31,9 +31,9 @@ struct ContentView: View {
             .tabItem { Label("历史", systemImage: "chart.bar.fill") }
             .tag(AppTab.history)
 
-            SettingsView()
+            SettingsView(library: appModel.rideLibrary)
                 .glassTabBar()
-                .tabItem { Label("设置", systemImage: "gearshape.fill") }
+                .tabItem { Label("我的", systemImage: "person.crop.circle.fill") }
                 .tag(AppTab.settings)
         }
         .tint(AppTheme.accentForeground)

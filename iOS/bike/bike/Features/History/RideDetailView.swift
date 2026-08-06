@@ -202,7 +202,7 @@ private struct RideDetailContent: View {
 
     let ride: RideRecord
     private var maximumSpeedMetersPerSecond: Double {
-        RideSpeedAnomalyFilter.maximumValidSpeed(points: ride.points)
+        RideSpeedAnomalyFilter.estimatedMaximumSpeed(points: ride.points)
     }
 
     var body: some View {
