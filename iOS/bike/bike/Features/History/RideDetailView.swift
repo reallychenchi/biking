@@ -201,6 +201,9 @@ private struct RideDetailContent: View {
     }
 
     let ride: RideRecord
+    private var maximumSpeedMetersPerSecond: Double {
+        RideSpeedAnomalyFilter.maximumValidSpeed(points: ride.points)
+    }
 
     var body: some View {
         VStack(spacing: RideDetailLayout.sectionSpacing) {
@@ -256,7 +259,7 @@ private struct RideDetailContent: View {
             ),
             RideDetailMetric(
                 title: "最快速度",
-                value: RideFormatting.speedCardValue(ride.maximumSpeedMetersPerSecond),
+                value: RideFormatting.speedCardValue(maximumSpeedMetersPerSecond),
                 unit: Unit.speed
             ),
             RideDetailMetric(

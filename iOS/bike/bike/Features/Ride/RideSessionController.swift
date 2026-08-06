@@ -52,9 +52,21 @@ final class RideSessionController {
         var segments: [[CLLocationCoordinate2D]] = []
         var distanceMeters = 0.0
         var maximumSpeedMetersPerSecond = 0.0
+        var speedFilter = RideSpeedAnomalyFilter.StreamingState()
         var latestSpeedMetersPerSecond: Double?
         var latestSpeedDate: Date?
         var latestAcceptedLocationDate: Date?
+
+        mutating func consumeMaximumSpeedCandidate(_ point: TrackPoint) {
+            guard let speed = speedFilter.consume(point) else { return }
+            maximumSpeedMetersPerSecond = max(maximumSpeedMetersPerSecond, speed)
+        }
+
+        mutating func finishMaximumSpeedCandidates() {
+            for speed in speedFilter.finish() {
+                maximumSpeedMetersPerSecond = max(maximumSpeedMetersPerSecond, speed)
+            }
+        }
     }
 
     private let repository: any RideRepository
@@ -152,11 +164,13 @@ final class RideSessionController {
         refreshTimeAndSpeed()
         currentSpeedMetersPerSecond = 0
 
-        guard let activeRide else {
+        guard var activeRide else {
             assertionFailure("Recording state requires an active ride")
             phase = .idle
             return
         }
+        activeRide.finishMaximumSpeedCandidates()
+        self.activeRide = activeRide
 
         if totalElapsedSeconds <= RideSessionConfiguration.shortRideDurationThresholdSeconds {
             AppLog.ride.info("Ride discarded: duration \(Int(self.totalElapsedSeconds))s is at or below threshold \(Int(RideSessionConfiguration.shortRideDurationThresholdSeconds))s")
@@ -288,8 +302,8 @@ final class RideSessionController {
                let speed = accepted.point.systemSpeedMetersPerSecond {
                 activeRide.latestSpeedMetersPerSecond = speed
                 activeRide.latestSpeedDate = accepted.point.timestamp
-                activeRide.maximumSpeedMetersPerSecond = max(activeRide.maximumSpeedMetersPerSecond, speed)
             }
+            activeRide.consumeMaximumSpeedCandidate(accepted.point)
             if accepted.discardedDriftSegment {
                 AppLog.location.warning("Discarded a drifting location segment")
             }

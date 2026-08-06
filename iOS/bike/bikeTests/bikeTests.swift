@@ -311,6 +311,43 @@ struct bikeTests {
     }
 
     @Test
+    func speedAnomalyFilterRemovesSinglePointBacktrackSpike() {
+        let points = speedSpikeFixture()
+        let analysis = RideSpeedAnalysis(points: points)
+
+        #expect(!analysis.chartPoints.map(\.sequence).contains(1741))
+        #expect(abs(RideSpeedAnomalyFilter.maximumValidSpeed(points: points) - 37.762 / 3.6) < 0.001)
+
+        var streaming = RideSpeedAnomalyFilter.StreamingState()
+        var maximumSpeed = 0.0
+        for point in points {
+            if let speed = streaming.consume(point) {
+                maximumSpeed = max(maximumSpeed, speed)
+            }
+        }
+        for speed in streaming.finish() {
+            maximumSpeed = max(maximumSpeed, speed)
+        }
+
+        #expect(abs(maximumSpeed - 37.762 / 3.6) < 0.001)
+    }
+
+    @Test
+    func speedAnomalyFilterKeepsSupportedHighSpeedPoints() {
+        let start = Date(timeIntervalSince1970: 3_800)
+        let points = [
+            trackPoint(sequence: 0, longitude: 116.0000, segmentIndex: 0, date: start, speedMetersPerSecond: 38 / 3.6),
+            trackPoint(sequence: 1, longitude: 116.00012, segmentIndex: 0, date: start.addingTimeInterval(1), speedMetersPerSecond: 42 / 3.6),
+            trackPoint(sequence: 2, longitude: 116.00024, segmentIndex: 0, date: start.addingTimeInterval(2), speedMetersPerSecond: 43 / 3.6)
+        ]
+
+        let validSpeed = RideSpeedAnomalyFilter.validSpeed(for: points[1], previous: points[0], next: points[2])
+
+        #expect(abs((validSpeed ?? 0) - 42 / 3.6) < 0.001)
+        #expect(abs(RideSpeedAnomalyFilter.maximumValidSpeed(points: points) - 43 / 3.6) < 0.001)
+    }
+
+    @Test
     func externalSpeedZoneLabelsMoveAwayFromCenterAndKeepMinimumSpacing() {
         let spacing: CGFloat = 14
         let centerY: CGFloat = 100
@@ -765,6 +802,7 @@ struct bikeTests {
 
     private func trackPoint(
         sequence: Int,
+        latitude: Double = 39.9,
         longitude: Double,
         segmentIndex: Int,
         date: Date,
@@ -773,13 +811,41 @@ struct bikeTests {
         TrackPoint(
             id: UUID(),
             sequence: sequence,
-            latitude: 39.9,
+            latitude: latitude,
             longitude: longitude,
             timestamp: date,
             horizontalAccuracy: 5,
             systemSpeedMetersPerSecond: speedMetersPerSecond,
             segmentIndex: segmentIndex
         )
+    }
+
+    private func speedSpikeFixture() -> [TrackPoint] {
+        let start = Date(timeIntervalSince1970: 4_000)
+        let samples: [(Int, Double, Double, Double)] = [
+            (1736, 39.9169327, 116.4972212, 20.716),
+            (1737, 39.9169419, 116.4972920, 20.827),
+            (1738, 39.9169449, 116.4973640, 21.084),
+            (1739, 39.9169500, 116.4974568, 26.267),
+            (1740, 39.9169565, 116.4975992, 37.762),
+            (1741, 39.9169794, 116.4977987, 52.686),
+            (1742, 39.9170071, 116.4976268, 22.452),
+            (1743, 39.9170204, 116.4976778, 21.216),
+            (1744, 39.9170335, 116.4977410, 20.811),
+            (1745, 39.9170553, 116.4977778, 17.452),
+            (1746, 39.9170735, 116.4978455, 21.328)
+        ]
+
+        return samples.enumerated().map { offset, sample in
+            trackPoint(
+                sequence: sample.0,
+                latitude: sample.1,
+                longitude: sample.2,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(TimeInterval(offset)),
+                speedMetersPerSecond: sample.3 / 3.6
+            )
+        }
     }
 
     private func elevationMetrics(_ altitudes: [Double]) -> ElevationMetrics {

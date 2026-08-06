@@ -1,0 +1,6 @@
+*
+!.gitignore
+!ride-speed-anomaly-20260806/
+ride-speed-anomaly-20260806/*
+!ride-speed-anomaly-20260806/README.md
+!ride-speed-anomaly-20260806/analysis.md

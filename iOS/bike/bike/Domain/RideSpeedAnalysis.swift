@@ -87,7 +87,8 @@ struct RideSpeedAnalysis: Hashable, Sendable {
         var activeSeriesIndex: Int?
         var nextSeriesIndex = 0
 
-        for point in sortedPoints {
+        for index in sortedPoints.indices {
+            let point = sortedPoints[index]
             let continuesSegment = previousPoint?.segmentIndex == point.segmentIndex
             var distanceFromPreviousMeters = 0.0
 
@@ -98,7 +99,14 @@ struct RideSpeedAnalysis: Hashable, Sendable {
                 activeSeriesIndex = nil
             }
 
-            if let speedMetersPerSecond = Self.validSpeed(point.systemSpeedMetersPerSecond) {
+            let nextPoint = index < sortedPoints.index(before: sortedPoints.endIndex)
+                ? sortedPoints[sortedPoints.index(after: index)]
+                : nil
+            if let speedMetersPerSecond = RideSpeedAnomalyFilter.validSpeed(
+                for: point,
+                previous: previousPoint,
+                next: nextPoint
+            ) {
                 if activeSeriesIndex == nil {
                     activeSeriesIndex = nextSeriesIndex
                     nextSeriesIndex += 1
@@ -138,16 +146,6 @@ struct RideSpeedAnalysis: Hashable, Sendable {
         totalDistanceMeters = cumulativeDistanceMeters
         self.classifiedDistanceMeters = classifiedDistanceMeters
         self.unclassifiedDistanceMeters = unclassifiedDistanceMeters
-    }
-
-    private static func validSpeed(_ speedMetersPerSecond: Double?) -> Double? {
-        guard let speedMetersPerSecond,
-              speedMetersPerSecond.isFinite,
-              speedMetersPerSecond >= 0,
-              speedMetersPerSecond <= LocationValidationConfiguration.maximumSpeedMetersPerSecond else {
-            return nil
-        }
-        return speedMetersPerSecond
     }
 
     private static func zoneIndex(for speedMetersPerSecond: Double) -> Int? {
