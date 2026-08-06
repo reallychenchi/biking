@@ -37,6 +37,7 @@ final class AppModel {
     func start() async {
         guard !didStart else { return }
         didStart = true
+        await refreshRideStatisticsIfNeeded()
         await rideLibrary.reload()
         do {
             showInterruptedRideAlert = try await !repository.unfinishedRideIDs().isEmpty
@@ -57,5 +58,44 @@ final class AppModel {
             showInterruptedRideAlert = true
             AppLog.persistence.error("Failed to discard unfinished rides: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func refreshRideStatisticsIfNeeded() async {
+        do {
+            let currentVersion = try AppVersionState.currentVersion()
+            guard AppVersionState.lastRefreshedStatisticsVersion != currentVersion else { return }
+
+            let updatedCount = try await repository.refreshCompletedRideDerivedMetrics()
+            AppVersionState.lastRefreshedStatisticsVersion = currentVersion
+            AppLog.persistence.info("Refreshed ride statistics for app version \(currentVersion, privacy: .public), updated rides: \(updatedCount)")
+        } catch {
+            AppLog.persistence.error("Failed to refresh ride statistics for app version change: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+}
+
+enum AppVersionState {
+    private static let statisticsVersionKey = "cc.chenchi.bike.statisticsRefreshedAppVersion"
+
+    static var lastRefreshedStatisticsVersion: String? {
+        get { UserDefaults.standard.string(forKey: statisticsVersionKey) }
+        set { UserDefaults.standard.set(newValue, forKey: statisticsVersionKey) }
+    }
+
+    static func currentVersion(bundle: Bundle = .main) throws -> String {
+        guard let version = bundle.infoDictionary?["CFBundleShortVersionString"] as? String,
+              !version.isEmpty else {
+            assertionFailure("Missing CFBundleShortVersionString")
+            throw AppVersionError.missingShortVersion
+        }
+        return version
+    }
+}
+
+enum AppVersionError: LocalizedError {
+    case missingShortVersion
+
+    var errorDescription: String? {
+        "无法读取当前 App 版本号。"
     }
 }

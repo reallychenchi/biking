@@ -6,6 +6,7 @@ protocol RideRepository: Sendable {
     func completeRide(_ completion: RideCompletionSnapshot, pendingPoints: [TrackPoint]) async throws
     func completedRideSummaries() async throws -> [RideSummary]
     func completedRide(id: UUID) async throws -> RideRecord
+    func refreshCompletedRideDerivedMetrics() async throws -> Int
     func unfinishedRideIDs() async throws -> [UUID]
     func discardUnfinishedRides() async throws
     func deleteRide(id: UUID) async throws

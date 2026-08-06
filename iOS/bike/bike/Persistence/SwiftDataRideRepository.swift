@@ -51,6 +51,26 @@ actor SwiftDataRideRepository: RideRepository {
         return try domainModel(entity)
     }
 
+    func refreshCompletedRideDerivedMetrics() throws -> Int {
+        let completedStatus = RideStatus.completed.rawValue
+        var descriptor = FetchDescriptor<RideEntity>(
+            predicate: #Predicate { ride in
+                ride.statusRawValue == completedStatus
+            }
+        )
+        descriptor.relationshipKeyPathsForPrefetching = [\RideEntity.points]
+
+        var updatedCount = 0
+        for ride in try modelContext.fetch(descriptor) {
+            guard applyCurrentDerivedMetrics(to: ride) else { continue }
+            updatedCount += 1
+        }
+        if updatedCount > 0 {
+            try modelContext.save()
+        }
+        return updatedCount
+    }
+
     func unfinishedRideIDs() throws -> [UUID] {
         try modelContext.fetch(FetchDescriptor<RideEntity>())
             .filter { $0.statusRawValue == RideStatus.recording.rawValue }
@@ -95,6 +115,38 @@ actor SwiftDataRideRepository: RideRepository {
         ride.minimumAltitudeMeters = progress.minimumAltitudeMeters
         ride.maximumAltitudeMeters = progress.maximumAltitudeMeters
         ride.updatedAt = progress.updatedAt
+    }
+
+    private func applyCurrentDerivedMetrics(to ride: RideEntity) -> Bool {
+        let points = ride.points.map(\.domainModel)
+        let currentMaximumSpeed = RideSpeedAnomalyFilter.estimatedMaximumSpeed(points: points)
+        let currentOverallSpeed = RideMetrics.speed(
+            distanceMeters: ride.distanceMeters,
+            durationSeconds: ride.totalElapsedSeconds
+        )
+        let currentAverageSpeed = RideMetrics.speed(
+            distanceMeters: ride.distanceMeters,
+            durationSeconds: ride.movingElapsedSeconds
+        )
+
+        var didUpdate = false
+        if !metricsEqual(ride.maximumSpeedMetersPerSecond, currentMaximumSpeed) {
+            ride.maximumSpeedMetersPerSecond = currentMaximumSpeed
+            didUpdate = true
+        }
+        if !metricsEqual(ride.overallSpeedMetersPerSecond, currentOverallSpeed) {
+            ride.overallSpeedMetersPerSecond = currentOverallSpeed
+            didUpdate = true
+        }
+        if !metricsEqual(ride.averageSpeedMetersPerSecond, currentAverageSpeed) {
+            ride.averageSpeedMetersPerSecond = currentAverageSpeed
+            didUpdate = true
+        }
+        return didUpdate
+    }
+
+    private func metricsEqual(_ lhs: Double, _ rhs: Double) -> Bool {
+        abs(lhs - rhs) < 0.000_001
     }
 
     private func summaryModel(_ entity: RideEntity) -> RideSummary {

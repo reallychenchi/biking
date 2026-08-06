@@ -673,6 +673,72 @@ struct bikeTests {
     }
 
     @Test
+    func repositoryRefreshesCompletedRideDerivedMetrics() async throws {
+        let container = try ModelContainer(
+            for: RideEntity.self,
+            TrackPointEntity.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        let repository = SwiftDataRideRepository(modelContainer: container)
+        let rideID = UUID()
+        let start = Date(timeIntervalSince1970: 4_500)
+        let points = [
+            trackPoint(
+                sequence: 0,
+                longitude: 116.4,
+                segmentIndex: 0,
+                date: start,
+                speedMetersPerSecond: 2
+            ),
+            trackPoint(
+                sequence: 1,
+                longitude: 116.400_01,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(1),
+                speedMetersPerSecond: 2
+            ),
+            trackPoint(
+                sequence: 2,
+                longitude: 116.400_02,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(2),
+                speedMetersPerSecond: 2
+            )
+        ]
+        let staleProgress = RideProgress(
+            totalElapsedSeconds: 50,
+            movingElapsedSeconds: 25,
+            distanceMeters: 100,
+            maximumSpeedMetersPerSecond: 99,
+            overallSpeedMetersPerSecond: 99,
+            averageSpeedMetersPerSecond: 99,
+            cumulativeAscentMeters: nil,
+            cumulativeDescentMeters: nil,
+            minimumAltitudeMeters: nil,
+            maximumAltitudeMeters: nil,
+            updatedAt: start.addingTimeInterval(50)
+        )
+
+        try await repository.createTemporaryRide(id: rideID, startDate: start, createdAt: start)
+        try await repository.completeRide(
+            RideCompletionSnapshot(
+                rideID: rideID,
+                endDate: start.addingTimeInterval(50),
+                progress: staleProgress
+            ),
+            pendingPoints: points
+        )
+
+        let updatedCount = try await repository.refreshCompletedRideDerivedMetrics()
+        let summaries = try await repository.completedRideSummaries()
+
+        #expect(updatedCount == 1)
+        #expect(summaries.first?.maximumSpeedMetersPerSecond == 2)
+        #expect(summaries.first?.overallSpeedMetersPerSecond == 2)
+        #expect(summaries.first?.averageSpeedMetersPerSecond == 4)
+    }
+
+    @Test
     func completedRideSummariesFiltersAndSorts() async throws {
         let container = try ModelContainer(
             for: RideEntity.self,
@@ -942,6 +1008,7 @@ private actor FakeRideRepository: RideRepository {
         detailCalls += 1
         throw RideRepositoryError.rideNotFound(id)
     }
+    func refreshCompletedRideDerivedMetrics() -> Int { 0 }
     func unfinishedRideIDs() -> [UUID] { [] }
     func discardUnfinishedRides() {}
     func deleteRide(id: UUID) { deleted += 1 }

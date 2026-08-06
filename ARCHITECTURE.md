@@ -68,7 +68,8 @@ SwiftUI map views -> MapKit + GCJ-02 display-coordinate projection + read-only d
 1. `bikeApp.init()` 创建本地 ModelContainer、仓储和 AppModel（`iOS/bike/bike/bikeApp.swift`）。
 2. `AppDelegate.application(_:didFinishLaunchingWithOptions:)` 配置并初始化友盟（`iOS/bike/bike/bikeApp.swift`）。
 3. `ContentView.task` 调用 `AppModel.start()`（`iOS/bike/bike/ContentView.swift`）。
-4. AppModel 加载已完成骑行，并查询 recording 状态的临时记录；发现未完成记录时提示用户删除（`iOS/bike/bike/AppModel.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
+4. AppModel 比对当前 App 版本与上次统计刷新版本；版本变化时通过仓储重算已完成骑行的派生速度指标，刷新失败只记录错误且不写入已处理版本，后续启动会重试（`iOS/bike/bike/AppModel.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
+5. AppModel 加载已完成骑行，并查询 recording 状态的临时记录；发现未完成记录时提示用户删除（`iOS/bike/bike/AppModel.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
 
 ### 2. 开始与记录骑行
 
@@ -88,12 +89,13 @@ SwiftUI map views -> MapKit + GCJ-02 display-coordinate projection + read-only d
 
 历史读取采用**摘要优先、详情按需**两阶段设计，避免冷启动时全量加载轨迹点阻塞主线程。
 
-1. `RideLibrary.reload()` 只调用 `completedRideSummaries()`，仓储使用 SwiftData predicate 在查询阶段过滤 completed 状态并按开始时间倒序返回 `[RideSummary]`；此路径不访问 `RideEntity.points` relationship，不触发 TrackPoint 加载或映射（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
-2. 列表项依次查询内存缓存和 App `Caches/RideRouteSnapshots` 磁盘缓存；**命中时不访问 repository**。缓存键仅依赖 `RideSummary` 的 ID、`updatedAt`、尺寸、scale 和外观（v5 格式，不修改 schema 不失效）。缓存未命中时才调用 `completedRide(id:)` 按单条 ID 加载轨迹，生成 MapKit 快照后写回两级缓存；snapshot 失败时保留不可交互的实时地图兜底，repository 失败显示明确错误图标（`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift`）。
-3. 点击历史卡片进入详情页后，页面通过 `.task(id:)` 调用 `completedRide(id:)`，该查询使用专用 `FetchDescriptor` 并设置 `relationshipKeyPathsForPrefetching = [\RideEntity.points]` 预取轨迹关系；成功后才展示详情指标、速度图、轨迹页和分享按钮，期间显示加载进度，失败提供重试入口（`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
-4. 详情页与轨迹缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；在将持久化坐标交给 MapKit 前通过 `MapCoordinateConverter` 转为 GCJ-02（`iOS/bike/bike/Domain/MapCoordinateConverter.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
-5. 详情页使用完整 `RideRecord.points` 派生累计距离—有效系统速度曲线，并按固定绝对速度区间累计有效距离占比；最快速度使用异常过滤后的短窗口稳健峰值，不直接取单个瞬时速度最大值；速度图、轨迹页和分享复用同一份完整记录，不二次读取 repository（`iOS/bike/bike/Domain/RideSpeedAnalysis.swift`、`iOS/bike/bike/Domain/RideSpeedAnomalyFilter.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`）。
-6. 删除先从 UI 暂存移除并提供 4 秒撤销；整个删除与撤销流程只持有 `RideSummary`，不加载完整轨迹；超时后调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
+1. 版本升级刷新路径调用 `refreshCompletedRideDerivedMetrics()`，仓储预取已完成骑行轨迹点，用当前 `RideSpeedAnomalyFilter` 和 `RideMetrics` 重算最快速度、全程速度、平均速度，供历史摘要和“我的”统计读取（`iOS/bike/bike/AppModel.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
+2. `RideLibrary.reload()` 只调用 `completedRideSummaries()`，仓储使用 SwiftData predicate 在查询阶段过滤 completed 状态并按开始时间倒序返回 `[RideSummary]`；此路径不访问 `RideEntity.points` relationship，不触发 TrackPoint 加载或映射（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
+3. 列表项依次查询内存缓存和 App `Caches/RideRouteSnapshots` 磁盘缓存；**命中时不访问 repository**。缓存键仅依赖 `RideSummary` 的 ID、`updatedAt`、尺寸、scale 和外观（v5 格式，不修改 schema 不失效）。缓存未命中时才调用 `completedRide(id:)` 按单条 ID 加载轨迹，生成 MapKit 快照后写回两级缓存；snapshot 失败时保留不可交互的实时地图兜底，repository 失败显示明确错误图标（`iOS/bike/bike/Features/History/HistoryView.swift`、`iOS/bike/bike/Services/RideRouteSnapshotRenderer.swift`、`iOS/bike/bike/Services/RideRouteSnapshotDiskCache.swift`）。
+4. 点击历史卡片进入详情页后，页面通过 `.task(id:)` 调用 `completedRide(id:)`，该查询使用专用 `FetchDescriptor` 并设置 `relationshipKeyPathsForPrefetching = [\RideEntity.points]` 预取轨迹关系；成功后才展示详情指标、速度图、轨迹页和分享按钮，期间显示加载进度，失败提供重试入口（`iOS/bike/bike/Features/History/RideDetailView.swift`、`iOS/bike/bike/Persistence/SwiftDataRideRepository.swift`）。
+5. 详情页与轨迹缩略图共用 `RideRouteGeometry` 按 `segmentIndex` 重建轨迹段；在将持久化坐标交给 MapKit 前通过 `MapCoordinateConverter` 转为 GCJ-02（`iOS/bike/bike/Domain/MapCoordinateConverter.swift`、`iOS/bike/bike/Features/History/RideRouteGeometry.swift`、`iOS/bike/bike/Features/History/RideRouteView.swift`）。
+6. 详情页使用完整 `RideRecord.points` 派生累计距离—有效系统速度曲线，并按固定绝对速度区间累计有效距离占比；最快速度使用异常过滤后的短窗口稳健峰值，不直接取单个瞬时速度最大值；速度图、轨迹页和分享复用同一份完整记录，不二次读取 repository（`iOS/bike/bike/Domain/RideSpeedAnalysis.swift`、`iOS/bike/bike/Domain/RideSpeedAnomalyFilter.swift`、`iOS/bike/bike/Features/History/RideSpeedChartsView.swift`、`iOS/bike/bike/Features/History/RideDetailView.swift`）。
+7. 删除先从 UI 暂存移除并提供 4 秒撤销；整个删除与撤销流程只持有 `RideSummary`，不加载完整轨迹；超时后调用仓储删除，实体关系采用 cascade 删除轨迹点（`iOS/bike/bike/Features/History/RideLibrary.swift`、`iOS/bike/bike/Persistence/RideEntities.swift`）。
 
 ### 5. 网络状态
 
