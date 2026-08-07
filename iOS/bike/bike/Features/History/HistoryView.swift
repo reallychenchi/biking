@@ -5,6 +5,7 @@ struct HistoryView: View {
     let library: RideLibrary
     let startFirstRide: () -> Void
     @State private var selectedRide: RideSummary?
+    @State private var isRootTabBarHidden = false
 
     var body: some View {
         NavigationStack {
@@ -15,7 +16,7 @@ struct HistoryView: View {
                     List {
                         ForEach(library.rides) { ride in
                             Button {
-                                selectedRide = ride
+                                openRideDetail(ride)
                             } label: {
                                 HistoryRideCard(ride: ride) {
                                     try await library.loadRide(id: ride.id).points
@@ -69,6 +70,21 @@ struct HistoryView: View {
                     try await library.loadRide(id: summary.id)
                 }
             }
+        }
+        .toolbar(isRootTabBarHidden ? .hidden : .visible, for: .tabBar)
+        .onChange(of: selectedRide) { _, ride in
+            if ride == nil {
+                isRootTabBarHidden = false
+            }
+        }
+    }
+
+    private func openRideDetail(_ ride: RideSummary) {
+        withTransaction(Transaction(animation: nil)) {
+            isRootTabBarHidden = true
+        }
+        DispatchQueue.main.async {
+            selectedRide = ride
         }
     }
 

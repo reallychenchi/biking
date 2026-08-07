@@ -4,6 +4,7 @@ struct SettingsView: View {
     let library: RideLibrary
     @AppStorage(AppearancePreference.storageKey) private var appearancePreference = AppearancePreference.system
     @State private var selectedRide: RideSummary?
+    @State private var isRootTabBarHidden = false
 
     private var stats: RidePersonalStats {
         RidePersonalStats(rides: library.rides)
@@ -20,7 +21,7 @@ struct SettingsView: View {
                         systemImage: "road.lanes",
                         ride: stats.longestDistanceRide,
                         value: { RideFormatting.distance($0.distanceMeters) },
-                        selectedRide: $selectedRide
+                        selectRide: openRideDetail
                     )
 
                     PersonalRecordLink(
@@ -28,7 +29,7 @@ struct SettingsView: View {
                         systemImage: "speedometer",
                         ride: stats.fastestMaximumSpeedRide,
                         value: { RideFormatting.speed($0.maximumSpeedMetersPerSecond) },
-                        selectedRide: $selectedRide
+                        selectRide: openRideDetail
                     )
 
                     PersonalRecordLink(
@@ -36,7 +37,7 @@ struct SettingsView: View {
                         systemImage: "gauge.with.dots.needle.bottom.50percent",
                         ride: stats.fastestAverageSpeedRide,
                         value: { RideFormatting.speed($0.averageSpeedMetersPerSecond) },
-                        selectedRide: $selectedRide
+                        selectRide: openRideDetail
                     )
 
                     PersonalRecordLink(
@@ -44,7 +45,7 @@ struct SettingsView: View {
                         systemImage: "timer",
                         ride: stats.fastestOverallSpeedRide,
                         value: { RideFormatting.speed($0.overallSpeedMetersPerSecond) },
-                        selectedRide: $selectedRide
+                        selectRide: openRideDetail
                     )
                 }
 
@@ -78,6 +79,21 @@ struct SettingsView: View {
                 }
             }
         }
+        .toolbar(isRootTabBarHidden ? .hidden : .visible, for: .tabBar)
+        .onChange(of: selectedRide) { _, ride in
+            if ride == nil {
+                isRootTabBarHidden = false
+            }
+        }
+    }
+
+    private func openRideDetail(_ ride: RideSummary) {
+        withTransaction(Transaction(animation: nil)) {
+            isRootTabBarHidden = true
+        }
+        DispatchQueue.main.async {
+            selectedRide = ride
+        }
     }
 }
 
@@ -101,12 +117,12 @@ private struct PersonalRecordLink: View {
     let systemImage: String
     let ride: RideSummary?
     let value: (RideSummary) -> String
-    @Binding var selectedRide: RideSummary?
+    let selectRide: (RideSummary) -> Void
 
     var body: some View {
         Button {
             guard let ride else { return }
-            selectedRide = ride
+            selectRide(ride)
         } label: {
             HStack(spacing: 12) {
                 Label(title, systemImage: systemImage)

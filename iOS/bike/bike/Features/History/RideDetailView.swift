@@ -29,9 +29,7 @@ struct RideDetailView: View {
         Group {
             switch loadState {
             case .loading:
-                ProgressView("正在加载…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(AppTheme.pageBackground.ignoresSafeArea())
+                loadingBody
             case let .loaded(presentation):
                 loadedBody(presentation: presentation)
             case let .failed(message):
@@ -91,6 +89,15 @@ struct RideDetailView: View {
         }
     }
 
+    private var loadingBody: some View {
+        ProgressView("正在加载…")
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(AppTheme.pageBackground.ignoresSafeArea())
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                detailTabBar(isEnabled: false)
+            }
+    }
+
     @ViewBuilder
     private func loadedBody(presentation: RideDetailPresentation) -> some View {
         Group {
@@ -105,14 +112,14 @@ struct RideDetailView: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            detailTabBar
+            detailTabBar(isEnabled: true)
         }
     }
 
-    private var detailTabBar: some View {
+    private func detailTabBar(isEnabled: Bool) -> some View {
         HStack(spacing: 0) {
-            detailTabButton("详情", systemImage: "list.bullet", tab: .details)
-            detailTabButton("轨迹", systemImage: "map", tab: .route)
+            detailTabButton("详情", systemImage: "list.bullet", tab: .details, isEnabled: isEnabled)
+            detailTabButton("轨迹", systemImage: "map", tab: .route, isEnabled: isEnabled)
         }
         .padding(.top, 8)
         .background(.ultraThinMaterial, ignoresSafeAreaEdges: .bottom)
@@ -121,7 +128,8 @@ struct RideDetailView: View {
     private func detailTabButton(
         _ title: String,
         systemImage: String,
-        tab: DetailTab
+        tab: DetailTab,
+        isEnabled: Bool
     ) -> some View {
         Button {
             selectedTab = tab
@@ -138,7 +146,10 @@ struct RideDetailView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.55)
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+        .accessibilityHint(isEnabled ? Text("") : Text("加载完成后可切换"))
     }
 
     private func shareDetail(presentation: RideDetailPresentation) {
