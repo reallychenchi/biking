@@ -5,12 +5,14 @@ struct RideRouteGeometry {
     static let mapPaddingRatio: Double = 0.2
 
     let segments: [[CLLocationCoordinate2D]]
+    let speedSegments: [RideRouteSpeedSegment]
     let coordinates: [CLLocationCoordinate2D]
     let mapRect: MKMapRect?
 
     init(points: [TrackPoint]) {
         let sortedPoints = points.sorted { $0.sequence < $1.sequence }
         segments = Self.makeSegments(from: sortedPoints)
+        speedSegments = Self.makeSpeedSegments(from: sortedPoints)
         coordinates = segments.flatMap { $0 }
         mapRect = Self.makeMapRect(for: coordinates)
     }
@@ -31,6 +33,46 @@ struct RideRouteGeometry {
             currentSegment.append(point.mapDisplayCoordinate)
         }
         result.append(currentSegment)
+        return result
+    }
+
+    private static func makeSpeedSegments(from points: [TrackPoint]) -> [RideRouteSpeedSegment] {
+        guard points.count >= 2 else { return [] }
+
+        var result: [RideRouteSpeedSegment] = []
+        var previousPoint: TrackPoint?
+
+        for index in points.indices {
+            let point = points[index]
+            defer { previousPoint = point }
+
+            guard let previousPoint,
+                  previousPoint.segmentIndex == point.segmentIndex else {
+                continue
+            }
+
+            let nextPoint = index < points.index(before: points.endIndex)
+                ? points[points.index(after: index)]
+                : nil
+            guard let speedMetersPerSecond = RideSpeedAnomalyFilter.validSpeed(
+                for: point,
+                previous: previousPoint,
+                next: nextPoint
+            ) else {
+                continue
+            }
+
+            result.append(
+                RideRouteSpeedSegment(
+                    coordinates: [
+                        previousPoint.mapDisplayCoordinate,
+                        point.mapDisplayCoordinate
+                    ],
+                    speedMetersPerSecond: speedMetersPerSecond
+                )
+            )
+        }
+
         return result
     }
 
@@ -56,4 +98,9 @@ struct RideRouteGeometry {
             dy: -height * mapPaddingRatio
         )
     }
+}
+
+struct RideRouteSpeedSegment {
+    let coordinates: [CLLocationCoordinate2D]
+    let speedMetersPerSecond: Double
 }

@@ -247,18 +247,37 @@ struct bikeTests {
     func routeGeometrySortsPointsAndPreservesSegmentBreaks() {
         let start = Date(timeIntervalSince1970: 3_500)
         let points = [
-            trackPoint(sequence: 2, longitude: 116.002, segmentIndex: 1, date: start.addingTimeInterval(2)),
-            trackPoint(sequence: 0, longitude: 116.000, segmentIndex: 0, date: start),
-            trackPoint(sequence: 1, longitude: 116.001, segmentIndex: 0, date: start.addingTimeInterval(1))
+            trackPoint(sequence: 2, longitude: -122.002, segmentIndex: 1, date: start.addingTimeInterval(2)),
+            trackPoint(sequence: 0, longitude: -122.000, segmentIndex: 0, date: start),
+            trackPoint(sequence: 1, longitude: -122.001, segmentIndex: 0, date: start.addingTimeInterval(1))
         ]
 
         let geometry = RideRouteGeometry(points: points)
 
         #expect(geometry.segments.count == 2)
-        #expect(geometry.segments[0].map(\.longitude) == [116.000, 116.001])
-        #expect(geometry.segments[1].map(\.longitude) == [116.002])
-        #expect(geometry.coordinates.map(\.longitude) == [116.000, 116.001, 116.002])
+        #expect(geometry.segments[0].map(\.longitude) == [-122.000, -122.001])
+        #expect(geometry.segments[1].map(\.longitude) == [-122.002])
+        #expect(geometry.coordinates.map(\.longitude) == [-122.000, -122.001, -122.002])
         #expect(geometry.mapRect != nil)
+    }
+
+    @Test
+    func routeGeometryBuildsSpeedSegmentsWithoutCrossingBreaks() {
+        let start = Date(timeIntervalSince1970: 3_550)
+        let points = [
+            trackPoint(sequence: 0, longitude: -122.000, segmentIndex: 0, date: start, speedMetersPerSecond: 2),
+            trackPoint(sequence: 1, longitude: -122.001, segmentIndex: 0, date: start.addingTimeInterval(1), speedMetersPerSecond: 4),
+            trackPoint(sequence: 2, longitude: -122.002, segmentIndex: 0, date: start.addingTimeInterval(2), speedMetersPerSecond: nil),
+            trackPoint(sequence: 3, longitude: -122.003, segmentIndex: 1, date: start.addingTimeInterval(3), speedMetersPerSecond: 6),
+            trackPoint(sequence: 4, longitude: -122.004, segmentIndex: 1, date: start.addingTimeInterval(4), speedMetersPerSecond: 8)
+        ]
+
+        let geometry = RideRouteGeometry(points: points)
+
+        #expect(geometry.speedSegments.count == 2)
+        #expect(geometry.speedSegments.map(\.speedMetersPerSecond) == [4, 8])
+        #expect(geometry.speedSegments[0].coordinates.map(\.longitude) == [-122.000, -122.001])
+        #expect(geometry.speedSegments[1].coordinates.map(\.longitude) == [-122.003, -122.004])
     }
 
     @Test

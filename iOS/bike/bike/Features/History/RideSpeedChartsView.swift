@@ -15,15 +15,6 @@ struct RideSpeedChartsView: View {
         static let externalLeaderTextSpacing: CGFloat = 4
     }
 
-    private static let zoneColors = [
-        Color(red: 0.93, green: 0.11, blue: 0.20),
-        Color(red: 0.94, green: 0.30, blue: 0.12),
-        Color(red: 0.90, green: 0.52, blue: 0.10),
-        Color(red: 0.70, green: 0.68, blue: 0.10),
-        Color(red: 0.38, green: 0.68, blue: 0.20),
-        Color(red: 0.12, green: 0.62, blue: 0.32)
-    ]
-
     private let analysis: RideSpeedAnalysis
     private let endDistanceMeters: Double
 
@@ -224,7 +215,7 @@ struct RideSpeedChartsView: View {
                 clockwise: true
             )
             path.closeSubpath()
-            context.fill(path, with: .color(color(for: sector.share.zone.id)))
+            context.fill(path, with: .color(RideSpeedZoneStyle.color(for: sector.share.zone.id)))
         }
 
         drawInternalZoneLabels(
@@ -462,14 +453,6 @@ struct RideSpeedChartsView: View {
 
     private func zoneLabel(for share: RideSpeedZoneShare) -> String {
         share.zone.title
-    }
-
-    private func color(for zoneID: Int) -> Color {
-        guard Self.zoneColors.indices.contains(zoneID) else {
-            assertionFailure("Missing speed zone color")
-            return AppTheme.secondaryText
-        }
-        return Self.zoneColors[zoneID]
     }
 
     private func unavailableContent(_ message: String) -> some View {

@@ -98,7 +98,7 @@ struct RideDetailView: View {
             case .details:
                 RideDetailInfoView(ride: ride)
             case .route:
-                RideRouteView(points: ride.points)
+                RideRouteView(points: ride.points, routeStyle: .speedGradient)
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
