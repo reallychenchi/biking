@@ -274,10 +274,54 @@ struct bikeTests {
 
         let geometry = RideRouteGeometry(points: points)
 
-        #expect(geometry.speedSegments.count == 2)
-        #expect(geometry.speedSegments.map(\.speedMetersPerSecond) == [4, 8])
-        #expect(geometry.speedSegments[0].coordinates.map(\.longitude) == [-122.000, -122.001])
-        #expect(geometry.speedSegments[1].coordinates.map(\.longitude) == [-122.003, -122.004])
+        #expect(geometry.speedGradientSegments.count == 2)
+        #expect(geometry.speedGradientSegments[0].coordinates.map(\.longitude) == [-122.000, -122.001, -122.002])
+        #expect(geometry.speedGradientSegments[0].stops.map(\.gradientStep) == [
+            RideSpeedZoneStyle.gradientStep(forSpeedMetersPerSecond: 2),
+            RideSpeedZoneStyle.gradientStep(forSpeedMetersPerSecond: 4)
+        ])
+        #expect(geometry.speedGradientSegments[1].coordinates.map(\.longitude) == [-122.003, -122.004])
+        #expect(geometry.speedGradientSegments[1].stops.map(\.gradientStep) == [
+            RideSpeedZoneStyle.gradientStep(forSpeedMetersPerSecond: 6),
+            RideSpeedZoneStyle.gradientStep(forSpeedMetersPerSecond: 8)
+        ])
+    }
+
+    @Test
+    func routeGeometryBuildsOneSpeedGradientPerContinuousRouteSegment() {
+        let start = Date(timeIntervalSince1970: 3_575)
+        let points = [
+            trackPoint(sequence: 0, longitude: -122.000, segmentIndex: 0, date: start, speedMetersPerSecond: 4),
+            trackPoint(sequence: 1, longitude: -122.001, segmentIndex: 0, date: start.addingTimeInterval(1), speedMetersPerSecond: 4),
+            trackPoint(sequence: 2, longitude: -122.002, segmentIndex: 0, date: start.addingTimeInterval(2), speedMetersPerSecond: 4)
+        ]
+
+        let geometry = RideRouteGeometry(points: points)
+
+        #expect(geometry.speedGradientSegments.count == 1)
+        #expect(geometry.speedGradientSegments[0].coordinates.map(\.longitude) == [-122.000, -122.001, -122.002])
+        #expect(geometry.speedGradientSegments[0].stops.map(\.location) == [0, 0.5, 1])
+    }
+
+    @Test
+    func routeGeometryCapsSpeedGradientStopsForMapRendering() {
+        let start = Date(timeIntervalSince1970: 3_585)
+        let points = (0...200).map { sequence in
+            trackPoint(
+                sequence: sequence,
+                longitude: 116 + Double(sequence) * 0.0001,
+                segmentIndex: 0,
+                date: start.addingTimeInterval(Double(sequence)),
+                speedMetersPerSecond: sequence.isMultiple(of: 2) ? 4 : 4.3
+            )
+        }
+
+        let geometry = RideRouteGeometry(points: points)
+
+        #expect(geometry.speedGradientSegments.count == 1)
+        #expect(geometry.speedGradientSegments[0].stops.count <= RideRouteGeometry.maximumSpeedGradientStops)
+        #expect(geometry.speedGradientSegments[0].coordinates.first?.longitude == 116)
+        #expect(geometry.speedGradientSegments[0].coordinates.last?.longitude == 116.02)
     }
 
     @Test

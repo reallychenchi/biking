@@ -2,6 +2,11 @@ import MapKit
 import SwiftUI
 
 struct RideRouteView: View {
+    private enum Layout {
+        static let routeLineWidth: CGFloat = 4
+        static let speedGradientRouteLineWidth: CGFloat = 2
+    }
+
     enum RouteStyle {
         case solid
         case speedGradient
@@ -12,7 +17,13 @@ struct RideRouteView: View {
     private let routeStyle: RouteStyle
 
     init(points: [TrackPoint], routeStyle: RouteStyle = .solid) {
-        let geometry = RideRouteGeometry(points: points)
+        self.init(
+            geometry: RideRouteGeometry(points: points),
+            routeStyle: routeStyle
+        )
+    }
+
+    init(geometry: RideRouteGeometry, routeStyle: RouteStyle = .solid) {
         self.geometry = geometry
         self.initialMapPosition = geometry.mapRect.map(MapCameraPosition.rect) ?? .automatic
         self.routeStyle = routeStyle
@@ -60,23 +71,28 @@ struct RideRouteView: View {
         ForEach(Array(geometry.segments.enumerated()), id: \.offset) { _, coords in
             if coords.count >= 2 {
                 MapPolyline(coordinates: coords)
-                    .stroke(AppTheme.accentForeground, lineWidth: 4)
+                    .stroke(AppTheme.accentForeground, lineWidth: Layout.routeLineWidth)
             }
         }
     }
 
     @MapContentBuilder
     private var speedGradientRouteOverlays: some MapContent {
-        if geometry.speedSegments.isEmpty {
+        if geometry.speedGradientSegments.isEmpty {
             solidRouteOverlays
         } else {
-            ForEach(Array(geometry.speedSegments.enumerated()), id: \.offset) { _, segment in
+            ForEach(Array(geometry.speedGradientSegments.enumerated()), id: \.offset) { _, segment in
                 MapPolyline(coordinates: segment.coordinates)
                     .stroke(
-                        RideSpeedZoneStyle.color(
-                            forSpeedMetersPerSecond: segment.speedMetersPerSecond
+                        Gradient(
+                            stops: segment.stops.map { stop in
+                                Gradient.Stop(
+                                    color: RideSpeedZoneStyle.color(forGradientStep: stop.gradientStep),
+                                    location: stop.location
+                                )
+                            }
                         ),
-                        lineWidth: 4
+                        lineWidth: Layout.speedGradientRouteLineWidth
                     )
             }
         }

@@ -2,6 +2,8 @@ import SwiftUI
 import UIKit
 
 enum RideSpeedZoneStyle {
+    private static let stepsPerTransition = 8
+
     static let colors = [
         Color(red: 0.93, green: 0.11, blue: 0.20),
         Color(red: 0.94, green: 0.30, blue: 0.12),
@@ -20,35 +22,58 @@ enum RideSpeedZoneStyle {
     }
 
     static func color(forSpeedMetersPerSecond speedMetersPerSecond: Double) -> Color {
+        color(forGradientStep: gradientStep(forSpeedMetersPerSecond: speedMetersPerSecond))
+    }
+
+    static func color(forGradientStep step: Int) -> Color {
+        let clampedStep = min(maximumGradientStep, max(0, step))
+        let lowerIndex = clampedStep / stepsPerTransition
+        let stepInTransition = clampedStep % stepsPerTransition
+
+        guard colors.indices.contains(lowerIndex) else {
+            assertionFailure("Missing speed zone color")
+            return AppTheme.secondaryText
+        }
+        guard stepInTransition > 0,
+              colors.indices.contains(lowerIndex + 1) else {
+            return colors[lowerIndex]
+        }
+
+        return colors[lowerIndex].interpolated(
+            to: colors[lowerIndex + 1],
+            progress: Double(stepInTransition) / Double(stepsPerTransition)
+        )
+    }
+
+    static func gradientStep(forSpeedMetersPerSecond speedMetersPerSecond: Double) -> Int {
         let kilometersPerHour = max(0, speedMetersPerSecond * 3.6)
         let zones = RideSpeedAnalysis.zones
         guard let firstZone = zones.first,
               let lastZone = zones.last else {
             assertionFailure("Missing speed zones")
-            return AppTheme.secondaryText
+            return 0
         }
 
         let firstUpperBound = firstZone.upperBoundKilometersPerHour ?? 0
         guard kilometersPerHour >= firstUpperBound else {
-            return color(for: firstZone.id)
+            return 0
         }
 
         for index in zones.indices.dropFirst() {
             let zone = zones[index]
             if let upperBound = zone.upperBoundKilometersPerHour,
-               kilometersPerHour < upperBound {
-                let lowerColor = color(for: zones[index - 1].id)
-                let upperColor = color(for: zone.id)
+               kilometersPerHour <= upperBound {
                 let progress = normalizedProgress(
                     value: kilometersPerHour,
                     lowerBound: zone.lowerBoundKilometersPerHour,
                     upperBound: upperBound
                 )
-                return lowerColor.interpolated(to: upperColor, progress: progress)
+                return (index - 1) * stepsPerTransition
+                    + Int((progress * Double(stepsPerTransition)).rounded())
             }
         }
 
-        return color(for: lastZone.id)
+        return lastZone.id * stepsPerTransition
     }
 
     private static func normalizedProgress(
@@ -58,6 +83,10 @@ enum RideSpeedZoneStyle {
     ) -> Double {
         guard upperBound > lowerBound else { return 0 }
         return min(1, max(0, (value - lowerBound) / (upperBound - lowerBound)))
+    }
+
+    private static var maximumGradientStep: Int {
+        max(0, colors.count - 1) * stepsPerTransition
     }
 }
 

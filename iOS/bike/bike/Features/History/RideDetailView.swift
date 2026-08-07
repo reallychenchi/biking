@@ -10,7 +10,7 @@ struct RideDetailView: View {
 
     private enum LoadState {
         case loading
-        case loaded(RideRecord)
+        case loaded(RideDetailPresentation)
         case failed(String)
     }
 
@@ -32,8 +32,8 @@ struct RideDetailView: View {
                 ProgressView("正在加载…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(AppTheme.pageBackground.ignoresSafeArea())
-            case let .loaded(ride):
-                loadedBody(ride: ride)
+            case let .loaded(presentation):
+                loadedBody(presentation: presentation)
             case let .failed(message):
                 ContentUnavailableView {
                     Label("加载失败", systemImage: "exclamationmark.triangle")
@@ -57,9 +57,9 @@ struct RideDetailView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
-            if case let .loaded(ride) = loadState {
+            if case let .loaded(presentation) = loadState {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { shareDetail(ride: ride) } label: {
+                    Button { shareDetail(presentation: presentation) } label: {
                         Image(systemName: "square.and.arrow.up")
                     }
                     .accessibilityLabel("分享骑行详情")
@@ -81,7 +81,7 @@ struct RideDetailView: View {
             do {
                 let record = try await loadRide()
                 try Task.checkCancellation()
-                loadState = .loaded(record)
+                loadState = .loaded(RideDetailPresentation(ride: record))
             } catch is CancellationError {
                 return
             } catch {
@@ -92,13 +92,16 @@ struct RideDetailView: View {
     }
 
     @ViewBuilder
-    private func loadedBody(ride: RideRecord) -> some View {
+    private func loadedBody(presentation: RideDetailPresentation) -> some View {
         Group {
             switch selectedTab {
             case .details:
-                RideDetailInfoView(ride: ride)
+                RideDetailInfoView(presentation: presentation)
             case .route:
-                RideRouteView(points: ride.points, routeStyle: .speedGradient)
+                RideRouteView(
+                    geometry: presentation.routeGeometry,
+                    routeStyle: .speedGradient
+                )
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -138,22 +141,22 @@ struct RideDetailView: View {
         .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
     }
 
-    private func shareDetail(ride: RideRecord) {
+    private func shareDetail(presentation: RideDetailPresentation) {
         let renderer = ImageRenderer(
-            content: RideDetailShareContent(ride: ride)
+            content: RideDetailShareContent(presentation: presentation)
                 .environment(\.colorScheme, colorScheme)
         )
         renderer.proposedSize = ProposedViewSize(width: UIScreen.main.bounds.width, height: nil)
         renderer.scale = displayScale
 
         guard let image = renderer.uiImage else {
-            AppLog.history.error("Failed to render ride detail share image for ride \(ride.id, privacy: .public)")
+            AppLog.history.error("Failed to render ride detail share image for ride \(presentation.ride.id, privacy: .public)")
             shareError = .renderingFailed
             return
         }
 
         sharePayload = RideSharePayload(image: image)
-        AppLog.history.info("Rendered ride detail share image for ride \(ride.id, privacy: .public)")
+        AppLog.history.info("Rendered ride detail share image for ride \(presentation.ride.id, privacy: .public)")
     }
 
     private struct TaskID: Equatable {
@@ -162,12 +165,26 @@ struct RideDetailView: View {
     }
 }
 
-private struct RideDetailInfoView: View {
+private struct RideDetailPresentation {
     let ride: RideRecord
+    let routeGeometry: RideRouteGeometry
+    let speedAnalysis: RideSpeedAnalysis
+    let maximumSpeedMetersPerSecond: Double
+
+    init(ride: RideRecord) {
+        self.ride = ride
+        routeGeometry = RideRouteGeometry(points: ride.points)
+        speedAnalysis = RideSpeedAnalysis(points: ride.points)
+        maximumSpeedMetersPerSecond = RideSpeedAnomalyFilter.estimatedMaximumSpeed(points: ride.points)
+    }
+}
+
+private struct RideDetailInfoView: View {
+    let presentation: RideDetailPresentation
 
     var body: some View {
         ScrollView {
-            RideDetailContent(ride: ride)
+            RideDetailContent(presentation: presentation)
         }
         .background(AppTheme.pageBackground.ignoresSafeArea())
         .foregroundStyle(AppTheme.primaryText)
@@ -175,17 +192,17 @@ private struct RideDetailInfoView: View {
 }
 
 private struct RideDetailShareContent: View {
-    let ride: RideRecord
+    let presentation: RideDetailPresentation
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(RideFormatting.date(ride.startDate))
+            Text(RideFormatting.date(presentation.ride.startDate))
                 .font(.title2.weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, RideDetailLayout.pagePadding)
                 .padding(.top, RideDetailLayout.sectionSpacing)
 
-            RideDetailContent(ride: ride)
+            RideDetailContent(presentation: presentation)
         }
         .background(AppTheme.pageBackground)
         .foregroundStyle(AppTheme.primaryText)
@@ -200,9 +217,9 @@ private struct RideDetailContent: View {
         static let elevation = "m"
     }
 
-    let ride: RideRecord
-    private var maximumSpeedMetersPerSecond: Double {
-        RideSpeedAnomalyFilter.estimatedMaximumSpeed(points: ride.points)
+    let presentation: RideDetailPresentation
+    private var ride: RideRecord {
+        presentation.ride
     }
 
     var body: some View {
@@ -230,7 +247,7 @@ private struct RideDetailContent: View {
             }
 
             RideSpeedChartsView(
-                points: ride.points,
+                analysis: presentation.speedAnalysis,
                 endDistanceMeters: ride.distanceMeters
             )
         }
@@ -259,7 +276,7 @@ private struct RideDetailContent: View {
             ),
             RideDetailMetric(
                 title: "最快速度",
-                value: RideFormatting.speedCardValue(maximumSpeedMetersPerSecond),
+                value: RideFormatting.speedCardValue(presentation.maximumSpeedMetersPerSecond),
                 unit: Unit.speed
             ),
             RideDetailMetric(

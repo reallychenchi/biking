@@ -19,7 +19,14 @@ struct RideSpeedChartsView: View {
     private let endDistanceMeters: Double
 
     init(points: [TrackPoint], endDistanceMeters: Double) {
-        analysis = RideSpeedAnalysis(points: points)
+        self.init(
+            analysis: RideSpeedAnalysis(points: points),
+            endDistanceMeters: endDistanceMeters
+        )
+    }
+
+    init(analysis: RideSpeedAnalysis, endDistanceMeters: Double) {
+        self.analysis = analysis
         self.endDistanceMeters = max(0, endDistanceMeters)
     }
 
